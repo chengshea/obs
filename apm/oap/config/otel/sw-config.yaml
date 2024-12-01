@@ -1,0 +1,130 @@
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##接收器
+receivers:
+  opencensus:
+    endpoint: 0.0.0.0:55678
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  prometheus:
+    config:
+     scrape_configs:
+       - job_name: 'skywalking-so11y'
+         scrape_interval: 8s
+         static_configs:
+           - targets: ['oap:1234']
+             labels:
+               host_name: http://oap:1234
+               service: oap-server
+       - job_name: otel-collector
+         static_configs:
+          - targets:
+              - otel:8888
+            labels:
+              service: otel-collector
+       - job_name: 'nginx-monitoring'
+         scrape_interval: 10s
+         metrics_path: "/metrics"
+         static_configs:
+            - targets: ['local.org:9145']
+              labels:
+                 service: nginx-service
+                 service_instance_id: e2e-test-instance
+       # - job_name: 'apisix-monitoring'
+       #   scrape_interval: 10s
+       #   metrics_path: "/apisix/prometheus/metrics"
+       #   static_configs:
+       #      - targets: ['local.org:9091']
+       #        labels:
+       #          skywalking_service: showcase-apisix-service
+       - job_name: "vm-monitoring" # make sure to use this in the vm.yaml to filter only VM metrics
+         scrape_interval: 10s
+         static_configs:
+            - targets: ["local.org:9100"]
+       - job_name: 'mysql-monitoring'
+         scrape_interval: 5s
+         static_configs:
+           - targets: ['local.org:9104']
+             labels:
+               host_name: local.org:3305
+       - job_name: "postgresql-monitoring"
+         scrape_interval: 5s
+         static_configs: #["postgres-exporter:9187","postgres-exporter_2:9187","postgres-exporter_3:9187"]
+            - targets: ["local.org:9187"]
+              labels:
+                host_name: local.org:5433
+       - job_name: 'redis-monitoring'
+         scrape_interval: 5s
+         static_configs:
+           - targets: ['local.org:9121']
+             labels:
+               host_name: local.org:9121
+       # - job_name: 'docker-monitoring'
+       #   scrape_interval: 10s
+       #   metrics_path: "/metrics"
+       #   static_configs:
+       #      - targets: ['local.org:9188']
+       #        labels:
+       #           service: docker-service
+       #           host_name: local.org                                               
+
+processors:
+  batch:
+    send_batch_size: 10000
+    send_batch_max_size: 10000
+    timeout: 10s
+##导出器
+exporters:
+  ####################################################################################
+  # If you want to use otlp exporter please ensure that your OAP version is >= 9.2.0 #
+  ####################################################################################
+  otlp:
+    endpoint: oap:11800
+    tls:
+      insecure: true
+    timeout: 10s
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 20s
+      max_elapsed_time: 2m
+  debug:
+
+##扩展组件
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  pprof:
+    endpoint: 0.0.0.0:1888
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+service:
+  telemetry:
+    metrics:
+      address: 0.0.0.0:8888
+  extensions: [health_check, pprof, zpages]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp,debug]
+    metrics:
+     # receivers: [otlp,prometheus]
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp,debug]

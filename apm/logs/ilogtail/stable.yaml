@@ -1,0 +1,25 @@
+---
+services:
+  ilogtail:
+    image: ilogtail:latest
+    container_name: ilogtail
+    labels:
+      app.name: "ilogtail"
+    volumes:
+      - /mnt/oss/docker-root/docker/containers:/var/lib/docker/containers:ro
+      - /:/logtail_host:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./config/:/usr/local/ilogtail/config/local/
+    networks:
+      - ck
+
+#直接收集打印error
+  openresty:
+    extends:
+      file: ../nginx/stable.yaml
+      service: openresty-err
+
+
+networks:
+  ck:
+    external: true

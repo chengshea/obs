@@ -1,0 +1,30 @@
+---
+
+services:
+  filebeat:
+    extends:
+      file: ./filebeat.yaml
+      service: filebeat
+    volumes:
+      - /home/cs/oss/k8s-1.26/apm/logs/log/:/var/log/
+    networks:
+      - ck
+
+  nginx:
+    image: nginx:alpine
+    container_name: nginx-ui
+    ports:
+      - "8089:80"
+    networks:
+      - ck
+
+  vmlogs:
+    extends:
+      file: ../../../vm/vmlogs.yaml
+      service: vmlogs
+    networks:
+       - ck
+
+networks:
+  ck:
+    external: true

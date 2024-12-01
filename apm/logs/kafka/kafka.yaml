@@ -1,0 +1,85 @@
+---
+#偏向消息搜索多维度 限流配置
+#https://github.com/xxd763795151/kafka-console-ui
+x-console-ui: &console-ui
+  image: openjdk:8-jre-alpine
+  container_name: kafka-ui
+  ports:
+    - 8088:7766
+  environment:
+    AUTH_ENABLED: true
+    KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+    KAFKA_PROPERTIES: |
+      sasl.mechanism=PLAIN\nsasl.jaas.config\=org.apache.kafka.common.security.plain.PlainLoginModule\u0020required\u0020username=\"admin\"\u0020password=\"admin-secret\";\nsecurity.protocol\=SASL_PLAINTEXT
+    read_sasl: |
+      sasl.mechanism=PLAIN
+      sasl.jaas.config=org.apache.kafka.common.security.plain.PlainLoginModule required username="admin" password="admin-secret";
+      security.protocol=SASL_PLAINTEXT
+  command: sh /app/start.sh
+  volumes:
+    - /mnt/lvm/oss/kafka/console-ui:/app
+
+services:
+  kafka:
+    image: 'apache/kafka:3.8.0'
+    container_name: kafka
+    ports:
+      - 29092
+      - 29093
+      - 9092
+    environment:
+      # environment variables must begin with KAFKA_
+      - KAFKA_NODE_ID=0
+      - KAFKA_PROCESS_ROLES=controller,broker
+      - KAFKA_LISTENERS=CLIENT://kafka:29092,CONTROLLER://kafka:29093,PLAINTEXT_HOST://0.0.0.0:9092
+      - KAFKA_ADVERTISED_LISTENERS=CLIENT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      - KAFKA_OPTS=-Djava.security.auth.login.config=/etc/kafka/jaas/kafka_server.conf
+      - KAFKA_CLIENT_USERS=admin
+      - KAFKA_CLIENT_PASSWORDS=admin-secret
+      - CLUSTER_ID=4L6g3nShT-eMCtK--X86sw
+      # Kafka Broker 通信
+      - KAFKA_INTER_BROKER_LISTENER_NAME=CLIENT
+      - KAFKA_SASL_MECHANISM_INTER_BROKER_PROTOCOL=PLAIN
+      - KAFKA_CLIENT_LISTENER_NAME=CLIENT
+      - KAFKA_SASL_ENABLED_MECHANISMS=PLAIN
+      - KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:SASL_PLAINTEXT,CLIENT:SASL_PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT 
+      - KAFKA_AUTO_CREATE_TOPICS_ENABLE=true
+      - KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1
+      - KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0
+      - KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1
+      - KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1
+      # controller
+      - KAFKA_SASL_MECHANISM_CONTROLLER_PROTOCOL=PLAIN
+      - KAFKA_CONTROLLER_QUORUM_VOTERS=0@kafka:29093
+      - KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER
+      - KAFKA_CONTROLLER_USER=controller_user
+      - KAFKA_CONTROLLER_PASSWORD=controller_password
+      #- KAFKA_VOLUME_DIR=/bitnami/kafka
+    volumes:
+      - ./jaas/kafka_server.conf:/etc/kafka/jaas/kafka_server.conf:ro
+    healthcheck:
+      test: [ "CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/9092" ]
+      interval: 10s #健康检查的执行间隔
+      timeout: 2s  #健康检查命令的超时时间
+      retries: 3 #失败的次数
+      start_period: 10s #开始执行健康检查之前的等待时间
+    networks:
+      - ck
+
+  kafka-ui:
+    <<: *console-ui
+    labels:
+       app.name: kafka-ui
+    depends_on:
+      kafka:
+         condition: service_healthy
+    networks:
+      - ck
+
+
+
+
+
+networks:
+  ck:
+    external: true

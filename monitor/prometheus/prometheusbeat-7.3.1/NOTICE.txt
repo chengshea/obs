@@ -1,0 +1,5 @@
+prometheusbeat
+Copyright 2018 BearingPoint Technology GmbH
+
+This product includes software developed by The Apache Software
+Foundation (http://www.apache.org/).

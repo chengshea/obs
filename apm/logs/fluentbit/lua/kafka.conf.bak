@@ -1,0 +1,18 @@
+@INCLUDE input-lua.conf
+
+
+[OUTPUT]
+    Name        kafka
+    Match       *
+    Brokers     kafka:29092
+    Topics      fluentbit_docker-lua
+    rdkafka.debug All
+    rdkafka.security.protocol SASL_PLAINTEXT
+    rdkafka.sasl.mechanism PLAIN
+    rdkafka.sasl.username admin
+    rdkafka.sasl.password admin-secret
+    rdkafka.request.required.acks 1
+    rdkafka.log.connection.close false
+    Format json
+    rdkafka.log_level 7
+    rdkafka.metadata.broker.list kafka:29092

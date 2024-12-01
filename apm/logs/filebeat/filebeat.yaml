@@ -1,0 +1,21 @@
+---
+
+services:
+  filebeat:
+    image: elastic/filebeat:8.15.2
+    container_name: filebeat
+    user: root
+    volumes:
+      - ./vmlogs.yml:/usr/share/filebeat/filebeat.yml:ro
+      - /mnt/oss/docker-root/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: filebeat -e --strict.perms=false
+    networks:
+      - ck
+
+
+
+
+networks:
+  ck:
+    external: true

@@ -1,0 +1,42 @@
+---
+
+services:
+  otel:
+    extends:
+      file: ../../../base/base.yaml
+      service: otel
+    volumes:
+      - './otel-ck.yaml:/etc/otelcol-contrib/config.yaml:ro'
+    labels:
+        logging: "promtail"
+        logging_jobname: "containerlogs"
+    networks:
+      - ck
+
+  promtail:
+    extends:
+      file: ../../../base/base.yaml
+      service: promtail
+    volumes:
+       - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - LOKI_URL=http://otel:3100/loki/api/v1/push?_stream_fields=instance,job,container
+    depends_on:
+      - otel
+    networks:
+      - ck
+
+  grafana:
+    extends:
+      file: ../../../base/base.yaml
+      service: grafana
+    labels:
+        logging: "promtail"
+        logging_jobname: "containerlogs"
+    networks:
+      - ck
+
+
+networks:
+  ck:
+    external: true

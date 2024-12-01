@@ -1,0 +1,52 @@
+---
+version: '3.8'
+services:
+  etcd:
+    image: bitnami/etcd:3.5.14
+    container_name: etcd
+    environment:
+      ALLOW_NONE_AUTHENTICATION: "yes"
+      ETCD_ADVERTISE_CLIENT_URLS: "http://etcd:2379"
+      ETCD_LISTEN_CLIENT_URLS: "http://0.0.0.0:2379"
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 15s #开始执行健康检查之前的等待时间
+
+  liaison:
+    image: apache/skywalking-banyandb:0.7-beta
+    container_name: liaison
+    ports:
+      - 17913:17913 #ui  http://localhost:17913
+      - 6060:6060   #pprof
+      - 2121:2121   #Observability
+    command: liaison --etcd-endpoints=http://etcd:2379  --observability-modes=native
+    healthcheck:
+      test: ["CMD", "./bydbctl", "health", "--addr=http://liaison:17913"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 15s #开始执行健康检查之前的等待时间
+    depends_on:
+       etcd:
+         condition: service_healthy
+
+  data:
+    image: apache/skywalking-banyandb:0.7-beta
+    container_name: data
+    expose:
+      - 17912
+      - 2121
+      - 6060
+    command: data  --etcd-endpoints=http://etcd:2379 --observability-modes=native
+    healthcheck:
+      test: ["CMD", "./bydbctl", "health", "--grpc-addr=data:17913"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 15s #开始执行健康检查之前的等待时间
+    depends_on:
+      etcd:
+        condition: service_healthy

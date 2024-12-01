@@ -1,0 +1,49 @@
+global:
+  scrape_interval: 10s
+
+scrape_configs:
+  - job_name: 'vmagent'
+    static_configs:
+      - targets: ['vmagent:8429']
+  - job_name: 'victoriametrics'
+    static_configs:
+      - targets: ['victoriametrics:8428']
+  - job_name: 'vmlogs'
+    static_configs:
+      - targets: ['vmlogs:9428']
+  - job_name: 'nginx-monitoring'
+    scrape_interval: 10s
+    metrics_path: "/metrics"
+    static_configs:
+      - targets: ['local.org:9145']
+        labels:
+           service: nginx-service
+           service_instance_id: e2e-test-instance
+  - job_name: 'promtail-monitoring'
+    scrape_interval: 12s
+    static_configs:
+      - targets: ['promtail:9080']
+        labels:
+           service: promtail-log
+  - job_name: "vm-monitoring" # make sure to use this in the vm.yaml to filter only VM metrics
+    scrape_interval: 10s
+    static_configs:
+      - targets: ["local.org:9100"]
+  - job_name: 'mysql-monitoring'
+    scrape_interval: 12s
+    static_configs:
+     - targets: ['local.org:9104']
+       labels:
+         host_name: local.org:3305
+  - job_name: "postgresql-monitoring"
+    scrape_interval: 12s
+    static_configs: #["postgres-exporter:9187","postgres-exporter_2:9187","postgres-exporter_3:9187"]
+      - targets: ["local.org:9187"]
+        labels:
+          host_name: local.org:5433
+  - job_name: 'redis-monitoring'
+    scrape_interval: 12s
+    static_configs:
+     - targets: ['local.org:9121']
+       labels:
+         host_name: local.org:9121

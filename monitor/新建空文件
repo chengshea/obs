@@ -1,0 +1,80 @@
+docker run -d \
+  -p 9104:9104 \
+  --network my-mysql-network  \
+  prom/mysqld-exporter
+  --config.my-cnf=<path_to_cnf>
+
+MySQL root@localhost:mysql> create user 'exporter'@'%' identified by 'exporter123'WITH MAX_USER_CONNECTIONS 3;
+Query OK, 0 rows affected
+Time: 0.007s
+MySQL root@localhost:mysql> GRANT PROCESS, REPLICATION CLIENT, SELECT ON *.* TO 'exporter'@'%'
+Query OK, 0 rows affected
+Time: 0.006s
+MySQL root@localhost:mysql> flush privileges;
+Query OK, 0 rows affected
+Time: 0.006s
+MySQL root@localhost:mysql> ALTER USER 'exporter'@'local.org' WITH MAX_USER_CONNECTIONS 8;
+
+
+docker run -d \
+  --net="host" \
+  --pid="host" \
+  -v "/:/host:ro,rslave" \
+  k8s.org/monitor/node-exporter:1.8.1 \
+  --path.rootfs=/host
+
+
+
+
+docker run \
+  --net=host \
+  -e DATA_SOURCE_URI="localhost:5432/postgres?sslmode=disable" \
+  -e DATA_SOURCE_USER=postgres \
+  -e DATA_SOURCE_PASS=password \
+  quay.io/prometheuscommunity/postgres-exporter
+
+
+
+
+❯ docker compose  -f  ~/oss/k8s-1.26/monitor/exporter.yaml down
+[+] Running 4/4
+ ⠿ Container postgres_exporter  Removed                                                                             2.9s
+ ⠿ Container node_exporter      Removed                                                                             3.2s
+ ⠿ Container mysqld_exporter    Removed                                                                             3.1s
+ ⠿ Network monitor_default      Removed                                                                             0.8s
+❯ docker compose  -f  ~/oss/k8s-1.26/apm/sk.yaml down
+[+] Running 5/5
+ ⠿ Container oap-ui            Removed                                                                              2.7s
+ ⠿ Container otel              Removed                                                                              3.0s
+ ⠿ Container es-exporter       Removed                                                                              1.3s
+ ⠿ Container oap               Removed                                                                              1.9s
+ ⠿ Network apm_skywalking-net  Removed                                                                              0.8s
+❯ bash /opt/ELK/elasticsearch-7.17.1/elasticsearch.sh stop
+elasticsearch is running
+>>>>>>>stop  6226
+
+###########################
+docker run -d --name redis_exporter -p 9121:9121 oliver006/redis_exporter
+
+ACL SETUSER exporter +client +ping +info +config|get +cluster|info +slowlog +latency +memory +select +get +scan +xinfo +type +pfcount +strlen +llen +scard +zcard +hlen +xlen +eval allkeys on >exporter123
+--redis.addr=redis://exporter:exporter123@local.org:9736
+
+默认用户
+./redis_exporter --redis.addr=redis://:cs123456@local.org:9736
+./redis_exporter --redis.addr=redis://cs:123456@local.org:9736
+
+
+
+
+
+
+
+
+
+
+
+
+❯ pwd
+/home/cs/data/registry/harbor/registry
+❯  find  docker/   -type  d  -name "current"  | sed  's|docker/registry/v2/repositories/||g;s|/_manifests/tags/|:|g;s|/current||g'
+

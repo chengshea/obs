@@ -1,0 +1,60 @@
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+##接收器
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+                                    
+
+processors:
+  batch:
+    send_batch_size: 10000
+    send_batch_max_size: 10000
+    timeout: 10s
+##导出器
+exporters:
+  ####################################################################################
+  # If you want to use otlp exporter please ensure that your OAP version is >= 9.2.0 #
+  ####################################################################################
+  otlp/jaeger:
+    endpoint: jaeger:4317
+    tls:
+       insecure: true
+    timeout: 10s
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 20s
+      max_elapsed_time: 2m
+  debug:
+
+##扩展组件
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  pprof:
+    endpoint: 0.0.0.0:1888
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+service:
+  telemetry:
+    metrics:
+      address: 0.0.0.0:8888
+  extensions: [health_check, pprof, zpages]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp/jaeger,debug]
+

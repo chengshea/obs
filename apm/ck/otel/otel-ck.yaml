@@ -1,0 +1,95 @@
+receivers:
+  loki:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:3100
+      grpc:
+    use_incoming_timestamp: true
+  opencensus:
+    endpoint: 0.0.0.0:55678
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  prometheus:
+    config:
+      global:
+        scrape_interval: 21s
+      scrape_configs:
+        - job_name: otel-collector
+          static_configs:
+          - targets:
+              - localhost:8888
+            labels:
+              job_name: otel-collector
+        - job_name: openresty
+          metrics_path: "/metrics"
+          static_configs:
+          - targets:
+              - local.org:9145
+            labels:
+              job_name: openresty
+        - job_name: promtail
+          metrics_path: "/metrics"
+          static_configs:
+          - targets:
+              - local.org:9011
+            labels:
+              job_name: promtail
+
+processors:
+  batch:
+    send_batch_size: 10000
+    send_batch_max_size: 11000
+    timeout: 10s
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+  zpages:
+    endpoint: 0.0.0.0:55679
+  pprof:
+    endpoint: 0.0.0.0:1777
+
+exporters:
+  clickhouse:
+    endpoint: tcp://local.org:9000?dial_timeout=10s&compress=lz4&async_insert=1
+    database: otel
+    username: otel
+    password: cs123456
+    logs_table_name: otel_logs
+    traces_table_name: otel_traces
+    ttl: 72h
+    timeout: 10s
+    sending_queue:
+      queue_size: 100
+    retry_on_failure:
+      enabled: true
+      initial_interval: 5s
+      max_interval: 30s
+      max_elapsed_time: 300s
+  debug:
+
+service:
+  telemetry:
+    metrics:
+      address: 0.0.0.0:8888
+  extensions:
+    - health_check
+    - zpages
+    - pprof
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [clickhouse]
+    logs:
+      receivers: [otlp,loki]
+      processors: [batch]
+      exporters: [clickhouse]
+    metrics:
+      receivers: [prometheus]
+      processors: [batch]
+      exporters: [debug]

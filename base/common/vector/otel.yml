@@ -1,0 +1,28 @@
+---
+data_dir: "/opt/tools/vector/data"
+
+api:
+  enabled: true
+  address: 0.0.0.0:8686
+
+sources:
+  otel_id:
+    type: opentelemetry
+    grpc:
+      address: 0.0.0.0:4317
+    http:
+      address: 0.0.0.0:4318
+      keepalive:
+        max_connection_age_jitter_factor: 0.1
+        max_connection_age_secs: 300
+
+
+
+sinks:
+  console:
+    type: console
+    inputs:
+      - otel_id.logs
+    encoding:
+      codec: "json"
+

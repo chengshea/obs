@@ -1,0 +1,55 @@
+CREATE TABLE IF NOT EXISTS  otel.nginx_logs (
+    LogTime DateTime(3),
+    `TraceId` String CODEC(ZSTD(1)),
+    RemoteAddr String,
+    RemoteUser String,
+    RequestMethod String,
+    Request String,
+    HttpVersion String,
+    Status Int32,
+    BytesSent Int64,
+    UserAgent String,
+    Host String,
+    Server String,
+    ServiceName String,
+    Forwarded String,
+    Level String,
+    Body String,
+    LogAttributes Map(LowCardinality(String), String) CODEC(ZSTD(1)),
+     INDEX idx_trace_id TraceId TYPE bloom_filter(0.001) GRANULARITY 1,
+    INDEX idx_log_attr_key mapKeys(LogAttributes) TYPE bloom_filter(0.01) GRANULARITY 1,
+    INDEX idx_log_attr_value mapValues(LogAttributes) TYPE bloom_filter(0.01) GRANULARITY 1,
+    INDEX idx_body Body TYPE tokenbf_v1(32768, 3, 0) GRANULARITY 1
+)
+ENGINE = MergeTree()
+ORDER BY LogTime
+TTL toDateTime(LogTime) + toIntervalDay(30)
+SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1
+
+SELECT * from otel.nginx_logs ls limit 20
+
+ALTER TABLE otel.nginx_logs DELETE WHERE LogTime = '1970-01-01 08:00:00.000';
+
+SELECT count(*) FROM otel.nginx_logs WHERE LogTime = '1970-01-01 08:00:00.000';
+
+
+    LogTime DateTime64(3),
+    RemoteAddr String,
+    RemoteUser String,
+    RequestMethod String,
+    Request String,
+    HttpVersion String,
+    Status Int32,
+    BytesSent Int64,
+    UserAgent String,
+    OriginalMessage String
+ Host String,
+    Server String,
+    ServiceName String,
+    Forwarded String,
+    Level String,
+        LogAttributes Map(LowCardinality(String), String) CODEC(ZSTD(1))
+
+
+SELECT * from  otel.access_logs limit 10
+SELECT * from  otel.otel_logs limit 10

@@ -1,0 +1,44 @@
+---
+services:
+  promtail:
+    extends:
+      file: ../../base/base.yaml
+      service: promtail
+    environment:
+      - LOKI_URL=http://loki:3100/loki/api/v1/push?_stream_fields=level,container
+    command:
+      - "-config.file=/etc/promtail/config.yaml"
+      - "-config.expand-env=true"
+    depends_on:
+      - loki
+    networks:
+      - ck
+
+  loki:
+    image: grafana/loki:3.2.0
+    container_name: loki
+    volumes:
+      - ./common/loki-config.yaml:/etc/loki/config.yaml
+    command: " -config.file=/etc/loki/local-config.yaml -target=all -legacy-read-mode=false "
+    labels:
+        logging: "promtail"
+        logging_jobname: "containerlogs"
+    networks:
+      - ck
+    ports:
+      - "3100"
+
+
+  grafana:
+    extends:
+      file: ../../base/base.yaml
+      service: grafana
+    labels:
+        logging: "promtail"
+        logging_jobname: "containerlogs"
+    networks:
+      - ck
+
+networks:
+  ck:
+    external: true

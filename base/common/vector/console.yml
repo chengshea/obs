@@ -1,0 +1,191 @@
+---
+data_dir: "/opt/tools/vector/data"
+
+api:
+  enabled: true
+  address: 0.0.0.0:8686
+
+sources:
+  nginx-log:
+    type: file
+    include:
+      - /opt/proxy/openresty/nginx/logs/local.log
+    read_from: end
+   # ignore_older_secs: 86400
+  myapp_kafka:
+        type: "kafka"
+        bootstrap_servers: "my-cluster-kafka-brokers.kafka.svc:9092"
+        group_id: "myapp"
+        topics:
+          - "pod_logs"
+        decoding:
+          codec: "json"
+        auto_offset_reset: "latest"
+  otel_id:
+    type: opentelemetry
+    grpc:
+      address: 0.0.0.0:4317
+    http:
+      address: 0.0.0.0:4318
+      keepalive:
+        max_connection_age_jitter_factor: 0.1
+        max_connection_age_secs: 300
+
+  otel-to-log:
+    type: file
+    include:
+      - /home/cs/oss/k8s-1.26/apm/test/log/otel.log
+    read_from: end
+
+
+#函数doc https://vector.dev/docs/reference/vrl/functions/#format_timestamp
+transforms:
+  myapp_filter:
+      type: filter
+      inputs:    # 匹配输入源
+        - myapp_kafka
+      condition: |
+        .kubernetes.deployment.name == "log-demo"
+  myapp_transform:
+      type: remap
+      inputs:    # 匹配输入源
+        - myapp_filter
+      source: |
+        . = parse_regex!(.message, r'^(?<logtime>[^|]+) \| (?<level>[A-Z]*) *\| __main__:(?<class>\D*:\d*) - (?<content>.*)$') # 正则提取logtime、level、class、content
+        .content = replace(.content, "'", "\"") # 将content单引号替换为双引号
+        .content = parse_json!(.content) # json解析content内容
+        .access_status = (.content.access_status) # 将content中的子字段提取到根级
+        .http_user_agent = (.content.http_user_agent)
+        .remote_address = (.content.remote_address)
+        .request_length = (.content.request_length)
+        .request_method = (.content.request_method)
+        .request_uri = (.content.request_uri)
+        .server_name = (.content.server_name)
+        .time_finish = (.content.time_finish)
+        .access_status = (.content.access_status)
+        .time_start = (.content.time_start)
+        del(.content) # 删除content字段
+        .logtime = parse_timestamp!((.logtime), format:"%Y-%m-%d %H:%M:%S.%3f") # 格式化时间字段
+        .time_start = parse_timestamp!((.time_start), format:"%Y-%m-%dT%H:%M:%S.%3f%:z") 
+        .time_finish = parse_timestamp!((.time_finish), format:"%Y-%m-%dT%H:%M:%S.%3f%:z")
+        .level = downcase(.level) # 将level字段值转小写
+         .geoip = get_enrichment_table_record!("geoip_table",  { "ip": .remote_address })  # ip地理位置信息解析
+
+  process:
+    type: remap
+    inputs:
+      - nginx-log
+    source: |
+        .parsed = parse_regex!(.message, r'^(?P<remote_addr>\d+\.\d+\.\d+\.\d+) - (?P<remote_user>[^ ]+) \[(?P<time_iso8601>[^\]]+)\] "(?P<request_method>[A-Z]+) (?P<request_uri>[^ ]+) (?P<http_version>HTTP/\d+\.\d+)" (?P<status>\d+) (?P<body_bytes_sent>\d+) "(?P<http_referer>[^"]+)" "(?P<http_user_agent>[^"]+)" "(?P<http_x_forwarded_for>[^"]+)" (?P<msec>\d+\.\d+)$')
+
+        # 提取字段
+        .RemoteAddr = .parsed.remote_addr
+        .RemoteUser = .parsed.remote_user
+        .TimeLocal = format_timestamp!(parse_timestamp!(.parsed.time_iso8601, format: "%Y-%m-%dT%H:%M:%S %z"), "%Y-%m-%d %H:%M:%S")
+        .RequestMethod = .parsed.request_method
+        .Request = .parsed.request_uri
+        .HttpVersion = .parsed.http_version
+        .Status = to_int!(.parsed.status)
+        .BytesSent = to_int!(.parsed.body_bytes_sent)
+        .UserAgent = .parsed.http_user_agent
+        .Client = .parsed.http_x_forwarded_for
+        .LogTime , err = .TimeLocal + "." + split(.parsed.msec,".")[1]
+        if err != null {
+          .LogTime = format_timestamp!(t'2020-10-21T16:00:00Z', format: "%Y-%m-%d %H:%M:%S.%3f")
+        }
+        .OriginalMessage = .message
+
+        del(.parsed)
+
+        if !exists(.RemoteAddr) { .RemoteAddr = "-" }
+        if !exists(.RemoteUser) { .RemoteUser = "-" }
+        if !exists(.RequestMethod) { .RequestMethod = "-" }
+        if !exists(.Request) { .Request = "-" }
+        if !exists(.HttpVersion) { .HttpVersion = "-" }
+        if !exists(.Status) { .Status = -1 }
+        if !exists(.BytesSent) { .BytesSent = -1 }
+        if !exists(.UserAgent) { .UserAgent = "-" }
+        if !exists(.Client) { .Client = "-" }
+        if !exists(.LogTime) { .LogTime = now() }
+
+  test:
+    type: remap
+    inputs:
+      - nginx-log
+    source: |
+        .parsed = parse_regex!(.message, r'^(?P<remote_addr>\d+\.\d+\.\d+\.\d+) - (?P<remote_user>[^ ]+) \[(?P<date>\d+\-\d+\-\d+)T(?P<time>\d+:\d+:\d+)(?P<timezone>\+\d{2}:\d{2})\] "(?P<request_method>[A-Z]+) (?P<request_uri>[^ ]+) (?P<http_version>HTTP/\d+\.\d+)" (?P<status>\d+) (?P<body_bytes_sent>\d+) "(?P<http_referer>[^"]+)" "(?P<http_user_agent>[^"]+)" "(?P<http_x_forwarded_for>[^"]+)" (?P<msec>\d+)\.(?P<ms>\d+)$')
+
+        # 提取字段
+        .RemoteAddr = .parsed.remote_addr
+        .RemoteUser = .parsed.remote_user
+        .TimeLocal = .parsed.date + " " + .parsed.time
+        .RequestMethod = .parsed.request_method
+        .Request = .parsed.request_uri
+        .HttpVersion = .parsed.http_version
+        .Status = to_int!(.parsed.status)
+        .BytesSent = to_int!(.parsed.body_bytes_sent)
+        .UserAgent = .parsed.http_user_agent
+        .Client = .parsed.http_x_forwarded_for
+        .LogTime = .TimeLocal + "." + .parsed.ms
+        .OriginalMessage = .message
+
+        del(.parsed)
+
+  tf_otel:
+    type: remap
+    inputs:
+      - otel-to-log
+    source: |
+        .parsed = parse_regex!(.message, r'^(?P<time>\S+) \[(?P<level>\S+)\] \d+#\d+: \*\d+ \[lua\] (?P<filename>.+?):\d+: (?P<body>.*?), client: (?P<client>\S+), server: (?P<server>\S+), request: "(?P<request_method>[A-Z]+) (?P<request_uri>[^ ]+) (?P<http_version>HTTP/\d+\.\d+)", host: "(?P<host>[^"]+)"')
+
+        # 提取字段
+        .RemoteAddr = .parsed.client
+        .Level = .parsed.level
+        .TimeLocal = .parsed.time
+        .RequestMethod = .parsed.request_method
+        .Request = .parsed.request_uri
+        .HttpVersion = .parsed.http_version
+        .host = .parsed.host
+        .server = .parsed.server
+         .LogAttributes = .attributes
+         .ServiceName = .attributes.container
+        .OriginalMessage = .message
+
+        del(.parsed)
+
+
+sinks:
+  console1:
+    type: console
+    inputs:
+      - test
+    encoding:
+      codec: "json"
+      json:
+        pretty: true
+      timestamp_format: "rfc3339"
+      only_fields: [
+          "RemoteAddr",
+          "RemoteUser",
+          "TimeLocal",
+          "RequestMethod",
+          "Request",
+          "HttpVersion",
+          "Status",
+          "BytesSent",
+          "UserAgent",
+          "Client",
+          "LogTime",
+          "OriginalMessage"
+      ]
+  otel_console:
+    type: console
+    inputs:
+      - otel_id
+    encoding:
+      codec: "json"
+
+enrichment_tables:
+  geoip_table: # 指定geoip数据库文件 GeoLite2-City.mmdb
+    path: "/opt/proxy/modules/geoip/GeoLite2-City.mmdb"
+    type: geoip

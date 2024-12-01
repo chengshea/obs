@@ -1,0 +1,43 @@
+#https://qryn.metrico.in/#/getting-started
+apiVersion: 1
+datasources:
+  - name: Loki-qryn
+    type: loki
+    access: proxy
+    uid: loki
+    url: http://qryn:3100
+    editable: true
+    jsonData:
+      derivedFields:
+        - datasourceUid: tempo
+          matcherRegex: ".*/traces/(?\u003ctraceId\u003e.*)"
+          name: "traceId"
+          url: "${__value.raw}"
+        - datasourceUid: tempo
+          matcherRegex: "^.*?traceI[d|D]=(\w+).*$"
+          name: TraceID
+          url: "${__value.raw}"
+  - name: Prom-qryn
+    type: prometheus
+    access: proxy
+    uid: prometheus
+    url: http://qryn:3100
+    basicAuth: false
+    jsonData:
+       graphiteVersion: "1.1"
+       tlsAuth: false
+       tlsAuthWithCACert: false
+  - name: Tempo-qryn
+    type: tempo
+    access: proxy
+    uid: tempo
+    url: http://qryn:3100
+    jsonData:
+      nodeGraph:
+        enabled: true
+      tracesToLogs:
+        datasourceUid: loki
+        filterByTraceID: false
+        spanEndTimeShift: "2000ms"
+        spanStartTimeShift: "-2000ms"
+        tags: ['job']

@@ -1,0 +1,78 @@
+# 等价conf @SET KEY=VAL
+env:
+    flush_interval: 1
+
+# service configuration
+service:
+    flush: ${flush_interval}
+    log_level: info
+    daemon: off
+    parsers_file: parsers.conf
+
+pipeline:
+  inputs:
+    - name: tail
+      path: /var/lib/docker/containers/*/*.log
+      parser: docker
+      db: /fluent-bit/etc/test.db
+      refresh_interval: 30
+      ignore_older: 6h
+      docker_mode: On
+      tag: source.docker.<container_id>
+      tag_regex: (.*\/(?<container_id>[a-z0-9]{64})-json\.log$)
+      processors:
+        logs:
+          - name: modify
+            add: hostname monox
+
+
+  filters:
+    - name: lua
+      match: source.docker.*
+      script: docker-metadata.lua
+      call: encrich_with_docker_metadata
+    - name: grep
+      match: source.docker.*
+      exclude:
+        - docker.container_name (^fluentbit|^vector)
+        - log ^$
+        - log ^\s\s+
+        - log ^\s*$
+        - log ^(\r?\n)?$
+        - log (^{\n|^}\n|^{})$
+    - name: record_modifier
+      match: source.docker.*
+      whitelist_key:
+        - log
+        - docker.container_started
+        - docker.container_name
+    - name: modify
+      match: source.docker.*
+      rename:
+        - docker.container_started container_started
+        - docker.container_name container_name
+
+  outputs:
+    - name: stdout
+      match: stdout.*
+      processors:
+        logs:
+          - name: lua
+            call: add_field
+            code: |
+                function add_field(tag, timestamp, record)
+                   new_record = record
+                   new_record["output"] = "new data"
+                   return 1, timestamp, new_record
+                end
+    - name: http
+      match: source.docker.*
+      host: vmlogs
+      port: 9428
+      compress: gzip
+      uri: /insert/jsonline?_stream_fields=source,container_name&_msg_field=log&_time_field=date
+      format: json_lines
+      json_date_format: iso8601
+      header:
+        AccountID: '0'
+        ProjectID: '0'

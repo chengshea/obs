@@ -1,0 +1,43 @@
+---
+include:
+  - ../../base/exporter/exporter.yaml
+  - ../../base/vm/single.yaml
+  - ../../base/vm/log.yaml
+
+services:
+  promtail:
+    extends:
+      file: ../../base/base.yaml
+      service: promtail
+    volumes:
+       - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - LOKI_URL=http://vmlogs:9428/insert/loki/api/v1/push?_stream_fields=instance,job,host,app
+
+  grafana:
+    extends:
+      file: ../../base/base.yaml
+      service: grafana
+    labels:
+        logging: "promtail"
+        logging_jobname: "containerlogs"
+
+
+  otel:
+    extends:
+      file: ../../apm/jaeger/jaegerotel.yaml
+      service: otel
+    labels:
+        logging: "promtail"
+        logging_jobname: "containerlogs"
+
+  jaeger:
+    extends:
+      file: ../../apm/jaeger/jaeger.yaml
+      service: jaeger
+    environment:
+      - OTEL_TRACES_SAMPLER=always_off
+
+networks:
+  apm:
+    driver: bridge

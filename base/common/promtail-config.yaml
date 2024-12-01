@@ -1,0 +1,95 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: "info"
+
+positions:
+  filename: /tmp/positions.yaml # 用于存储 Promtail 已处理日志的位置信息，避免重复处理。
+  sync_period: 30s
+
+clients:
+  - url: ${LOKI_URL}
+    #tenant_id: 1
+    headers:
+      batch_size: 5194300  # 最大批次大小（字节）
+      batch_wait: 5s       # 等待最大批次大小的时长
+    backoff_config:
+      min_period: 100ms
+      max_period: 5m
+      max_retries: 10
+
+#https://grafana.com/docs/loki/latest/send-data/promtail/pipelines/
+scrape_configs:
+- job_name: openresty
+  static_configs:
+    - targets:
+        - localhost
+      labels:
+        job: openresty
+        container: openresty
+        __path__: /var/log/*.log
+  pipeline_stages:
+    - multiline:
+        firstline: '^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} \[error\]'  # 开头匹配错误日志的行
+        max_wait_time: 3s
+        max_lines: 80
+    - regex:
+        expression: '\[(?P<level>warn|notice|info|error)\]'
+    - labels:
+        level:
+
+- job_name: docker 
+  docker_sd_configs:
+    - host: unix:///var/run/docker.sock
+      refresh_interval: 5s
+      filters:
+        - name: label
+          values: ["logging=promtail"] 
+  relabel_configs:
+    - source_labels: ['__meta_docker_container_name']
+      regex: '/(.*)'
+      target_label: 'container'
+    - source_labels: ['__meta_docker_container_log_stream']
+      target_label: 'logstream'
+    - source_labels: ['__meta_docker_container_label_logging_jobname']
+      target_label: 'job'
+  pipeline_stages:
+    - cri: {}
+    - multiline:
+        firstline: ^\d{4}-\d{2}-\d{2} \d{1,2}:\d{2}:\d{2},\d{3}
+        max_wait_time: 3s
+    - regex:
+        expression: '(?P<level>warn|info|error)'
+    - labels:
+        level:
+
+# 多条件匹配
+- job_name: dtmatch
+  static_configs:
+    - targets:
+        - localhost
+      labels:
+        job: openresty
+        container: openresty
+        __path__: /var/log/dtmatch*.log
+  pipeline_stages:
+    - multiline:
+        firstline: '^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} \[[a-z]+\] \d+#\d+:'  # 开头匹配错误日志的行,eg:2024/10/06 13:31:50 [notice] 30118#0:
+        max_wait_time: 3s
+        max_lines: 80
+    - match: #https://grafana.com/docs/loki/latest/query/log_queries/#line-filter-expression
+        selector: '{__path__=~ ".*error.log"} |~ ".*[error].*" '
+        stages:
+          - regex:
+              expression: '^(?s)(?P<time>\S+ \S+) \[(?P<level>warn|notice|info|error)\] \d+#\d+: (?P<body>.*?), client: (?P<client>\S+), server: (?P<server>\S+), request: "(?P<request_method>[A-Z]+) (?P<request_uri>[^ ]+) (?P<http_version>HTTP/\d+\.\d+)"(?:, upstream: "(?P<upstream>[^"]+)")?, host: "(?P<host>[^"]+)"(?:, referrer: "(?P<referrer>[^"]+)")?$'
+          - labels:
+              level:
+    - match:
+        selector: '{__path__=~ ".*error.log"} |~ ".*[notice].*" '
+        stages:
+          - regex:
+              expression: '^(?s)(?P<time>\S+ \S+) \[(?P<level>warn|notice|info)\] \d+#\d+: (?P<body>.*)$'
+          - labels:
+              level:
+    - output:
+        source: body

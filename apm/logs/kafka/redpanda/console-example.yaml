@@ -1,0 +1,143 @@
+#https://docs.redpanda.com/current/console/config/configure-console/#example-redpanda-console-configuration-file
+kafka:
+  brokers:
+    - broker-0.mycompany.com:19092
+  #clientId: console
+  #rackId:
+  sasl:
+    enabled: false
+    username:
+    password:
+    # Valid mechanisms are: PLAIN, SCRAM-SHA-256,SCRAM-SHA-512, GSSAPI, OAUTHBEARER and AWS_MSK_IAM.
+    mechanism: PLAIN
+
+  tls:
+    enabled: false
+    caFilepath:
+    certFilepath:
+    keyFilepath:
+    insecureSkipTlsVerify: false
+
+  schemaRegistry:
+    enabled: false
+    # Url with scheme is required, for example ["http://localhost:8081"].
+    urls: []
+    username:
+    # Basic auth password. This can also be set using the --schema.registry.password flag.
+    password:
+    bearerToken:
+    tls:
+      enabled: false
+      caFilepath:
+      certFilepath:
+      keyFilepath:
+      insecureSkipTlsVerify: false
+
+
+redpanda:
+  adminApi:
+    enabled: false
+    # HTTP urls (such as http://localhost:9644) that Redpanda Console should send Admin API requests to.
+    urls: []
+    username: ""
+    password: ""
+    tls:
+      enabled: false
+      caFilepath: ""
+      certFilepath: ""
+      keyFilepath: ""
+    startup:
+      maxRetries: 5
+      retryInterval: 1s
+      maxRetryInterval: 60s
+      backoffMultiplier: 2
+
+
+
+connect:
+  enabled: false
+  clusters:
+    - name: xy
+      url: http://my-cluster:8083
+      tls:
+        enabled: false
+        caFilepath:
+        certFilepath:
+        keyFilepath:
+        insecureSkipTlsVerify: false
+      username:
+      password:
+      #token:
+  connectTimeout: 15s
+  readTimeout: 60s
+  requestTimeout: 6s
+
+#console:
+  # Max deserialization determines the maximum payload size for record payloads (key/value/headers)
+  # that are sent to the frontend when listing messages. Payloads that exceed this value will be
+  # omitted. If you try to inspect very large messages on the frontend, this will crash the frontend
+  # application due to resource constraints in the browser. To avoid these crashes, you can limit
+  # the size here. Records can still be downloaded using the "Save to file" action regardless of this size.
+  # maxDeserializationPayloadSize: 20480
+  # Configuration to use for embedded topic documentation
+  #topicDocumentation:
+    #enabled: false
+    # Configure the git repository that contains the topic documentation.
+    # Redpanda Console clones the git repository and periodically pulls for new
+    # changes so it can render the markdown files within the topic view.
+    #git:
+      #enabled: false
+      #repository:
+        #url:
+        #branch: (defaults to primary/default branch)
+        #baseDirectory: .
+      # How often Console pulls the repository to look for new files.
+      # Set to 0 to disable periodic pulls.
+      #refreshInterval: 1m
+      # To use GitHub's personal access tokens, use `token`
+      # for the username and pass the token as password.
+      #basicAuth:
+        #enabled: true
+        #username: token
+        #password:
+      #ssh:
+        #enabled: false
+        #username:
+        #privateKey:
+        #privateKeyFilepath:
+        #passphrase:
+
+#server:
+  #listenAddress:
+  #listenPort: 8080
+  #httpsListenPort: 8081
+  #advertisedHttpsListenPort: 443
+  #gracefulShutdownTimeout: 30s
+  #readTimeout: 30s
+  #writeTimeout: 30s
+  #idleTimeout: 30s
+  #compressionLevel: 4
+  # Sub-path under which Console is hosted. See https://docs.redpanda.com/current/manage/console/http-path-rewrites/ for more information
+  #basePath:
+  # Whether or not to check the 'X-Forwarded-Prefix' header to potentially override 'basePath'
+  #setBasePathFromXForwardedPrefix: true
+  #stripPrefix: true
+  #tls:
+    #enabled: false
+    #certFilepath:
+    #keyFilepath:
+  #allowedOrigins: []
+
+# Only relevant for developers, who might want to run the frontend separately.
+serveFrontend: true
+
+# exported Prometheus metrics. /console
+metricsNamespace: console
+  
+# Valid values are: debug, info, warn, error, fatal.
+logger:
+  level: info
+
+# 向 Redpanda 发送匿名使用情况统计信息
+analytics:
+  enabled: false

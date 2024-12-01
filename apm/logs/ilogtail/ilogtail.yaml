@@ -1,0 +1,35 @@
+---
+
+services:
+  ilogtail:
+    image: ilogtail:latest
+    container_name: ilogtail
+    labels:
+      app.name: "ilogtail"
+    volumes:
+      - /mnt/oss/docker-root/docker/containers:/var/lib/docker/containers:ro
+      - /:/logtail_host:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+  #    - "/var/lib/docker_ilogtail/checkpoint:/usr/local/ilogtail/checkpoint"
+      - ./config/:/usr/local/ilogtail/config/local/
+      - ../nginx/logs/:/tmp/
+    networks:
+      - ck
+
+  vector:
+    extends:
+      file: ../../../base/base.yaml
+      service: vector
+    volumes:
+      - ../nginx/logs/:/var/log/
+    entrypoint: ["vector", "-c", "/etc/vector/vector.yaml"]
+    environment:                         # 设置环境变量
+      VECTOR_LOG: error                  # 可以设置日志级别为debug
+    networks:
+      - ck
+
+
+
+networks:
+  ck:
+    external: true

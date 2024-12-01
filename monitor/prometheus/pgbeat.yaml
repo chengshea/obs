@@ -1,0 +1,84 @@
+#prometheus  写入es (prometheusbeat)
+---
+version: '3.8'
+services:
+  grafana:
+    image: k8s.org/grafana/grafana:10.1.2
+    container_name: grafana
+    ports:
+      - "3000:443"
+    volumes:
+      - "/opt/monitor/grafana/conf/provisioning:/etc/grafana/provisioning"
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - ./grafana/custom.ini:/etc/grafana/grafana.ini
+      - /opt/proxy/openresty/nginx/conf/conf.d/ssl:/var/lib/grafana/ssl
+    extra_hosts:
+       - "k8s.org:192.168.122.1" # 添加主机名
+  prometheus:
+   # image: k8s.org/monitor/prometheus:v2.47.0
+    image: prom/prometheus:v2.54.1
+    container_name: prometheus
+    volumes:
+      - "./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+      - "/mnt/oss/db/tsdb/prometheus:/prometheus:rw"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles" 
+      - "--storage.tsdb.retention.time=3d"
+      - "--storage.tsdb.retention.size=1GB"
+      - "--storage.tsdb.wal-compression"
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z -v localhost 9090 || exit 1"]
+      interval: 5s #健康检查的执行间隔
+      timeout: 2s  #健康检查命令的超时时间
+      retries: 2 #失败的次数
+      start_period: 15s #开始执行健康检查之前的等待时间
+    ports:
+      - "9090:9090"
+    extra_hosts:
+       - "local.org:192.168.122.1" # 添加主机名
+  ##使用prometheusbeat 把prometheus的数据存储到elasticsearch中
+  prometheusbeat:
+    image: prometheusbeat:7.3.1
+    container_name: prometheusbeat
+    ports:
+      - 18080:8080
+    depends_on:
+      - prometheus
+    volumes:
+      - "./prometheusbeat-7.3.1/prometheusbeat.yml:/prometheusbeat.yml"
+      - '/opt/monitor/elasticsearch_exporter-1.7.0/ssl:/opt:ro'
+      - "/etc/localtime:/etc/localtime"
+    extra_hosts:
+       - "local.org:192.168.122.1" # 添加主机名
+    healthcheck:
+      test: [ "CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/8080" ]
+      interval: 3s #健康检查的执行间隔
+      timeout: 2s  #健康检查命令的超时时间
+      retries: 3 #失败的次数
+      start_period: 6s #开始执行健康检查之前的等待时间
+  elasticsearch_exporter:
+    image: k8s.org/monitor/elasticsearch-exporter:v1.7.0
+    container_name: es-exporter
+    command:
+     - '--es.uri=https://elastic:cs123456@es.local.org:9123'
+     - '--es.ca=/opt/ca.crt'
+     - '--es.client-private-key=/opt/es.key'
+     - '--es.client-cert=/opt/es.crt'
+     # - '--es.ssl-skip-verify'  #跳过证书验证
+     - '--collector.clustersettings'
+     - '--collector.snapshots'
+     - '--web.telemetry-path=/metrics'
+     - '--web.listen-address=:9114'
+     - '--es.timeout=15s'
+     - '--es.clusterinfo.interval=3m'
+    volumes:
+      - '/opt/monitor/elasticsearch_exporter-1.7.0/ssl:/opt:ro'
+    extra_hosts:
+      - "es.local.org:192.168.122.1" # 添加主机名
+    ports:
+    - "9114:9114"
+
+

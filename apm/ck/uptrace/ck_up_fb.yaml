@@ -1,0 +1,71 @@
+---
+services:
+  clickhouse:
+    extends:
+      file: ../../../base/base.yaml
+      service: clickhouse
+    environment:
+      - CLICKHOUSE_DB=uptrace
+    networks:
+      - ck
+  uptrace:
+    image: uptrace/uptrace:1.7.7 
+    container_name: uptrace
+    restart: on-failure
+    volumes:
+      - ./config/uptrace.yml:/etc/uptrace/uptrace.yml
+    #environment:
+    #  - DEBUG=2
+    ports:
+      - '14317:14317'
+      - '14318:14318'
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - ck
+
+
+  otel-collector:
+    extends:
+      file: ../../../base/base.yaml
+      service: otel
+    volumes:
+      - './config/otel-ck.yaml:/etc/otelcol-contrib/config.yaml:ro'
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - ck
+
+#https://docs.fluentbit.io/manual/administration/monitoring
+  fluentbit:
+    extends:
+      file: ../../../base/base.yaml
+      service: fluentbit
+    networks:
+      - ck
+##https://mailpit.axllent.org/docs/configuration/runtime-options/
+  mailpit:
+    image: axllent/mailpit:v1.20
+    container_name: mailpit
+    ports:
+      - 1025:1025
+      - 8025:8025
+    environment:
+      MP_UI_AUTH_FILE: /data/authuifile
+      MP_MAX_MESSAGES: 1000
+      MP_DATA_FILE: /data/mailpit.db
+ #     MP_SMTP_AUTH_FILE: /data/authsmtpfile
+      MP_SMTP_BIND_ADDR: 0.0.0.0:1025
+      MP_SMTP_AUTH_ACCEPT_ANY: true  #接受任何用户名或密码
+      MP_SMTP_AUTH_ALLOW_INSECURE: true
+    volumes:
+      - ./mailpit_data:/data
+    networks:
+      - ck
+
+
+networks:
+  ck:
+    external: true

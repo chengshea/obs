@@ -1,0 +1,84 @@
+#https://www.elastic.co/guide/en/beats/filebeat/current/filebeat-input-container.html
+#filebeat自身日志配置 debug, info, warning, or error
+logging.level: warning
+
+filebeat.inputs:
+- type: container
+  enabled: true
+  stream: all
+  paths: 
+    - "/var/lib/docker/containers/*/*-json.log"
+  format: docker
+  harvester_limit: 1048576
+  harvester_buffer_size: 524288
+  multiline: # 做多行日志聚合，此处是针对的异常堆栈信息聚合
+    type: pattern
+    pattern: '^\[?\d{3,4}.\d{1,3}.\d{1,3}|^{\"'
+    negate: true
+    match: after
+  include_lines: ['^\[?\d{3,4}.\d{1,3}.\d{1,3}|^{\"']
+  exclude_lines: ['debug|DEBUG']
+  fields: #添加新字段可发送至不同topic
+     log_topic: containers
+  processors:
+  - add_docker_metadata:
+      host: "unix:///var/run/docker.sock"
+      match_source: true
+      cleanup_timeout: 36000
+      labels.dedot: false
+  - include_fields:
+      fields: ["container.name","fields.log_topic","message"]
+
+
+- type: log
+  enabled: false
+  paths:
+    - /var/log/error.log
+  multiline.type: pattern
+  multiline.pattern: '^\[?\d{3,4}.\d{1,3}.\d{1,3}|^{\"'
+  multiline.negate: true
+  multiline.match: after
+  multiline.timeout: 5s
+  mutiline.max_lines: 210
+  tail_files: true
+  fields:
+   #添加新字段可发送至不同topic
+   log_topic: nginx
+
+
+processors:
+- drop_fields:
+    fields: ["host","input","agent","ecs","ecs.version","@version","flags"]
+
+
+# 设置输出到控制台
+output.console:
+  enabled: false
+  codec.json:
+    pretty: true
+    escape_html: false
+
+
+
+output.kafka:
+  enabled: true
+  hosts: ["kafka:29092"]
+  #根据上面添加字段发送不同topic
+  topic: 'filebeat_%{[fields.log_topic]}'
+  partition.round_robin:
+    reachable_only: false
+  required_acks: 1
+  compression: gzip
+  max_message_bytes: 1000000
+  sasl.mechanism: PLAIN
+  username: admin
+  password: admin-secret
+
+output.elasticsearch:
+  enabled: false
+  hosts: [ "http://vmlogs:9428/insert/elasticsearch/" ]
+  worker: 5
+  parameters:
+    _msg_field: "message"
+    _time_field: "@timestamp"
+    _stream_fields: "container.name"

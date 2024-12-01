@@ -1,0 +1,16 @@
+
+
+❯ helm install -f ./prometheus-node-exporter/value.yaml  node-exporter ./prometheus-node-exporter  -n monitor
+
+
+
+❯ helm upgrade -f ./coredns-1.29.0/value.yaml coredns ./coredns-1.29.0 -n kube-system
+
+
+
+
+./banyand-server standalone   --observability-listener-addr=2121   --observability-modes=native
+❯ make generate
+❯ make build
+╭─    ~/go/skywalking-banyandb  on   main ▓▒░··································░▒▓ INT ✘   09-03  18:50:33  ─╮
+╰─❯      

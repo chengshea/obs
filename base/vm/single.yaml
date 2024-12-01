@@ -1,0 +1,28 @@
+---
+services:
+  victoriametrics:
+    image: victoriametrics/victoria-metrics:v1.103.0
+    container_name: victoriametrics
+    hostname: victoriametrics
+    environment:
+      TZ: Asia/Shanghai
+    volumes:
+      - /mnt/oss/db/tsdb/vmstorage/single:/vm-data
+    ports:
+      - "8427:8428"  #cluter authui 8427  http://victoriametrics:8428/vmui (or at http://<vmselect>:8481/select/<accountID>/vmui/
+    command:
+      - -loggerTimezone=Asia/Shanghai
+      - -storageDataPath=/vm-data
+      - -promscrape.maxScrapeSize=1Gb
+
+
+  vmagent:
+    extends:
+      file: agent.yaml
+      service: vmagent
+    volumes:
+      - ./config/prometheus-single.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--promscrape.config=/etc/prometheus/prometheus.yml'
+      - '--remoteWrite.url=http://victoriametrics:8428/api/v1/write'
+      - '--remoteWrite.tmpDataPath=/vmagentdata'

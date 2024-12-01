@@ -1,0 +1,28 @@
+sqlite> CREATE TABLE IF NOT EXISTS containers (
+    id TEXT,
+    name TEXT PRIMARY KEY,
+    created INTEGER
+);
+sqlite> CREATE INDEX IF NOT EXISTS id_index ON containers(id);
+
+
+-- 添加一个新列，类型为 TEXT
+ALTER TABLE containers ADD COLUMN created_temp TEXT;
+
+-- 将原始列的数据复制到新列
+UPDATE containers SET created_temp = created;
+
+-- 删除原始列
+ALTER TABLE containers DROP COLUMN created;
+
+-- 重命名新列
+ALTER TABLE containers RENAME COLUMN created_temp TO created;
+
+
+没有数据
+sqlite> ALTER TABLE containers DROP COLUMN created;
+sqlite> ALTER TABLE containers ADD COLUMN created TEXT;
+sqlite> PRAGMA table_info(containers);
+0|id|TEXT|0||0
+1|name|TEXT|0||1
+2|created|TEXT|0||0

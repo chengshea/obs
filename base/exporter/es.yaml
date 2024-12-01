@@ -1,0 +1,23 @@
+---
+services:
+  elasticsearch_exporter:
+    image: k8s.org/monitor/elasticsearch-exporter:v1.7.0
+    container_name: es-exporter
+    command:
+     - '--es.uri=https://elastic:cs123456@es.local.org:9123'
+     - '--es.ca=/opt/ca.crt'
+     - '--es.client-private-key=/opt/es.key'
+     - '--es.client-cert=/opt/es.crt'
+     # - '--es.ssl-skip-verify'  #跳过证书验证
+     - '--collector.clustersettings'
+     - '--collector.snapshots'
+     - '--web.telemetry-path=/metrics'
+     - '--web.listen-address=:9114'
+     - '--es.timeout=15s'
+     - '--es.clusterinfo.interval=3m'
+    volumes:
+      - '/opt/monitor/elasticsearch_exporter-1.7.0/ssl:/opt:ro'
+    extra_hosts:
+      - "es.local.org:192.168.122.1" # 添加主机名
+    ports:
+    - "9114:9114"

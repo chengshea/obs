@@ -1,0 +1,45 @@
+global:
+  file_watch_config:
+    min_poll_frequency: 250ms
+    max_poll_frequency: 5s
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+  log_level: "info"
+
+positions:
+  filename: /tmp/positions.yaml # 用于存储 Promtail 已处理日志的位置信息，避免重复处理。
+  sync_period: 30s
+  ignore_invalid_yaml: true #是否忽略并覆盖被破坏的 positions 文件
+clients:
+  - url: ${LOKI_URL}
+    tenant_id: ""
+    headers:
+      batch_size: 5194300  # 最大批次大小（字节）
+      batch_wait: 5s       # 等待最大批次大小的时长
+    backoff_config:
+      min_period: 100ms
+      max_period: 5m
+      max_retries: 10
+
+#https://grafana.com/docs/loki/latest/send-data/promtail/pipelines/
+scrape_configs:
+- job_name: openresty
+  static_configs:
+    - targets:
+        - localhost
+      labels:
+        job: openresty
+        container: openresty
+        __path__: /var/log/*-error.log
+  pipeline_stages:
+    - multiline:
+        firstline: '^\d{4}/\d{2}/\d{2} \d{2}:\d{2}:\d{2} \[[a-z]+\] \d+#\d+:'  # 开头匹配错误日志的行,eg:2024/10/06 13:31:50 [notice] 30118#0:
+        max_wait_time: 3s
+        max_lines: 80
+    - regex:
+        expression: '^(?P<time>\S+ \S+) \[(?P<level>warn|notice|info|error)\]'
+    - labels:
+        level:
+

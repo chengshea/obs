@@ -1,0 +1,126 @@
+---
+x-clickhouse-defaults: &clickhouse-defaults
+  # addding non LTS version due to this fix https://github.com/ClickHouse/ClickHouse/commit/32caf8716352f45c1b617274c7508c86b7d1afab
+  image: clickhouse/clickhouse-server:24.8.4.13-alpine
+  hostname: clickhouse
+  tty: true
+  logging:
+    options:
+      max-size: 50m
+      max-file: "3"
+  healthcheck:
+    # "clickhouse", "client", "-u ${CLICKHOUSE_USER}", "--password ${CLICKHOUSE_PASSWORD}", "-q 'SELECT 1'"
+    test:
+      [
+        "CMD",
+        "wget",
+        "--spider",
+        "-q",
+        "0.0.0.0:8123/ping"
+      ]
+    interval: 30s
+    timeout: 5s
+    retries: 3
+    start_period: 15s #开始执行健康检查之前的等待时间
+  privileged: false  # 可以选择不使用特权模式  get_mempolicy: Operation not permitted 配置 cap_add
+  cap_add:
+    - SYS_NICE
+    - NET_ADMIN
+    - IPC_LOCK
+  ulimits:
+    nproc: 65535
+    nofile:
+      soft: 262144
+      hard: 262144
+
+services:
+  clickhouse:
+    <<: *clickhouse-defaults
+    container_name: clickhouse
+    hostname: clickhouse
+    ports:
+      - "9000:9000"
+      - "8123:8123"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+      - ./common/docker.xml:/etc/clickhouse-server/config.d/docker.xml
+      - /mnt/oss/db/olap/clickhouse/standalone:/var/lib/clickhouse:rw
+
+  promtail:
+    image: grafana/promtail:3.2.0
+    container_name: promtail
+    volumes:
+      - /mnt/oss/docker-root/docker/containers:/var/lib/docker/containers:ro
+      - ./common/promtail-config.yaml:/etc/promtail/config.yaml
+      - /opt/proxy/openresty/nginx/logs:/var/log
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command:
+      - "-config.file=/etc/promtail/config.yaml"
+      - "-config.expand-env=true"
+    environment:
+      - LOKI_URL=http://loki:3100/loki/api/v1/push
+    ports:
+      - 9080
+
+#https://docs.fluentbit.io/manual/administration/monitoring
+  fluentbit:
+    #image: fluent/fluent-bit:3.1.9-amd64
+    image: fluent/fluent-bit:v3.1.9-avro
+    container_name: fluentbit
+    volumes:
+      - /mnt/oss/docker-root/docker/containers:/var/lib/docker/containers:ro
+      - ./common/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf
+    ports:
+      - 2020
+
+
+  otel:
+    image: otel/opentelemetry-collector-contrib:0.111.0
+   # image: opentelemetry-collector-contrib:0.108.0-cs
+    container_name: otel
+    volumes:
+      - './common/otel-config.yaml:/etc/otelcol-contrib/config.yaml:ro'
+    ports:
+      - 1888:1888 # pprof extension
+      - 8888:8888 # Prometheus metrics exposed by the Collector
+      - 8889:8889 # Prometheus exporter metrics
+      - 13133:13133 # health_check extension   http://localhost:13133/health
+      - 4317:4317 # OTLP gRPC receiver
+      - 4318:4318 # OTLP http receiver
+      - 56789:55679 # zpages extension   55679/debug/servicez
+    extra_hosts:
+      - "local.org:192.168.122.1" # 添加主机名
+
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: grafana
+    ports:
+      - "13000:443"
+    environment:
+      ## URL;folder,URL;folder 
+     - GF_INSTALL_PLUGINS=/etc/grafana/provisioning/plugins/victorialogs-datasource-v0.3.0.zip;victorialogs-datasource,/etc/grafana/provisioning/plugins/victoriametrics-datasource-v0.9.0.zip;victoriametrics-datasource
+     - GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS=victorialogs-datasource,victoriametrics-datasource
+     - GF_PATHS_PLUGINS=/etc/grafana/provisioning/plugins
+    volumes:
+      - "/opt/monitor/grafana/conf/provisioning:/etc/grafana/provisioning"
+      - /opt/monitor/grafana/conf/docker.ini:/etc/grafana/grafana.ini
+      - /opt/proxy/openresty/nginx/conf/conf.d/ssl:/var/lib/grafana/ssl
+
+ #https://clickhouse.com/docs/en/integrations/vector
+  vector:
+    image: timberio/vector:latest-alpine  # 选择适合的 Vector 镜像
+    container_name: vector                # 容器名
+    labels:
+      app.name: "vector"
+    volumes:                            # 挂载卷
+      - ./common/vector:/etc/vector  # 挂载配置文件
+      - /etc/localtime:/etc/localtime      # 时区保持一致
+    ports:                               # 暴露端口
+      - 8686                        # metrics信息暴露端口
+    environment:                         # 设置环境变量
+      VECTOR_LOG: info                  # 可以设置日志级别为debug
+#    entrypoint: ["vector", "-c", "/etc/vector/*.yaml", "-w", "/etc/vector/*.yaml"]
+
+
+

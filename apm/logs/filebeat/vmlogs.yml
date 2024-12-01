@@ -1,0 +1,65 @@
+#https://www.elastic.co/guide/en/beats/filebeat/current/filebeat-input-container.html
+#filebeat自身日志配置 debug, info, warning, or error
+logging.level: warning
+
+filebeat.inputs:
+- type: container
+  enabled: true
+  stream: all
+  paths: 
+    - "/var/lib/docker/containers/*/*-json.log"
+  format: docker
+  harvester_limit: 1048576
+  harvester_buffer_size: 524288
+  multiline:
+    # 做多行日志聚合，此处是针对java的异常堆栈信息聚合（所有非年-月-日开头的日志会被聚合到最开始匹配到的那一行展示）
+    type: pattern
+    pattern: '^\[?\d{3,4}(\.|/|-)\d{1,3}(\.|/|-)\d{1,3}|^{\"'
+    negate: true
+    match: after
+  fields:
+       #添加新字段可发送至不同topic
+     log_topic: containers
+  include_lines: ['^\[?\d{3,4}(\.|/|-)\d{1,3}(\.|/|-)\d{1,3}|^{\"']
+  exclude_lines: ['debug|DEBUG']
+  processors:
+  - add_docker_metadata:
+      host: "unix:///var/run/docker.sock"
+      match_source: true
+      cleanup_timeout: 36000 #获取容器名等数据60s太耗cpu,机器发热严重
+      labels.dedot: false
+  - include_fields:
+      when: #待测试 failed to initialize condition: missing or invalid condition
+        not:
+          container: ["container.name"]
+      fields: ["container.name"]
+  - script:
+      lang: javascript #ECMAScript 5.1 不支持读取文件
+      source: >
+        function process(event) {
+            var str = JSON.stringify(event);
+            var match =/"path":"([^"].*-json.log)"/.exec(str);
+            var path = match ? match[1] : null;
+            event.Put("path",path);
+        }
+
+processors:
+- drop_fields:
+    fields: ["host","input","agent","ecs","ecs.version","@version","flags","log"]
+
+# 设置输出到控制台
+output.console:
+  enabled: false
+  codec.json:
+    pretty: true
+    escape_html: false
+
+
+output.elasticsearch:
+  enabled: true
+  hosts: [ "http://vmlogs:9428/insert/elasticsearch/" ]
+  worker: 5
+  parameters:
+    _msg_field: "message"
+    _time_field: "@timestamp"
+    _stream_fields: "container.name"

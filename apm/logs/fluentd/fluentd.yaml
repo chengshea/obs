@@ -1,0 +1,50 @@
+---
+x-vmlogs-log: &vm-logs
+    extends:
+      file: ../../../base/vm/log.yaml
+      service: vmlogs
+    ports:
+      - "9428:9428"
+    networks:
+      - ck
+
+x-nginx: &nginx-ui
+    extends:
+      file: ../nginx/stable.yaml
+      service: nginx
+    networks:
+      - ck
+
+x-openresty: &openresty-ui
+    extends:
+      file: ../nginx/stable.yaml
+      service: openresty
+    networks:
+      - ck
+
+
+
+services:
+  fluentd:
+    image: fluentd:v1.17-1-docker_metadata_kafka
+    container_name: fluentd
+    volumes:
+      - /mnt/oss/docker-root/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      #- ./forward.conf:/fluentd/etc/fluent.conf
+      - ./stdout.conf:/fluentd/etc/fluent.conf
+      - ../nginx/logs/:/home/:ro
+    ports:
+      - 24224:24224
+    networks:
+      - ck
+
+  nginx:
+    <<: *nginx-ui
+
+  vmlogs:
+    <<: *vm-logs
+
+networks:
+  ck:
+    external: true

@@ -1,0 +1,153 @@
+---
+data_dir: "/tmp"
+
+api:
+  enabled: true
+  address: 0.0.0.0:8686
+
+
+sources:
+  nginx-access-log:
+    type: file
+    include:
+      - /var/log/*.log
+    exclude:
+      - /var/log/error.log
+    read_from: end
+
+  otel_log:
+    type: opentelemetry
+    grpc:
+      address: 0.0.0.0:4317
+    http:
+      address: 0.0.0.0:4318
+      keepalive:
+        max_connection_age_jitter_factor: 0.1
+        max_connection_age_secs: 300
+#https://vector.dev/docs/reference/configuration/sources/kafka/
+  kafka_id:
+    type: kafka
+    bootstrap_servers: kafka:29092
+    group_id: logs-to-vector
+    auto_offset_reset: "smallest"
+    topics:
+      - ^(fluentbit|fluent|filebeat|ilogtail)_.+
+    decoding:
+       codec: json
+    tls:
+      enabled: false #true 
+    sasl: #true  false
+      enabled: true
+      mechanism: "PLAIN"
+      username: admin
+      password: admin-secret
+
+transforms:
+  process:
+    type: remap
+    inputs:
+      - nginx-access-log
+    source: |
+        .Body = .message
+         del(.message)
+
+        .parsed = parse_regex!(.Body, r'^(?P<remote_addr>\d+\.\d+\.\d+\.\d+) - (?P<remote_user>[^ ]+) \[(?P<date>\d+\-\d+\-\d+)T(?P<time>\d+:\d+:\d+)(?P<timezone>\+\d{2}:\d{2})\] "(?P<request_method>[A-Z]+) (?P<request_uri>[^ ]+) (?P<http_version>HTTP/\d+\.\d+)" (?P<status>\d+) (?P<body_bytes_sent>\d+) "(?P<http_referer>[^"]+)" "(?P<http_user_agent>[^"]+)" "(?P<http_x_forwarded_for>[^"]+)" (?P<msec>\d+)\.(?P<ms>\d+) (?P<trace_id>\w+)$')
+
+        # 提取字段
+        .RemoteAddr = .parsed.remote_addr
+        .RemoteUser = .parsed.remote_user
+        .RequestMethod = .parsed.request_method
+        .Request = .parsed.request_uri
+        .HttpVersion = .parsed.http_version
+        .Status = to_int!(.parsed.status)
+        .BytesSent = to_int!(.parsed.body_bytes_sent)
+        .UserAgent = .parsed.http_user_agent
+        .Forwarded = .parsed.http_referer
+        .LogTime = .parsed.date + " " + .parsed.time + "." + .parsed.ms
+
+        .TraceId = .parsed.trace_id
+
+        del(.parsed)
+
+        if !exists(.Level) { .Level = "info" }
+        if !exists(.ServiceName) { .ServiceName = "openresty" }
+        if !exists(.Status) { .Status = -1 }
+        if !exists(.BytesSent) { .BytesSent = -1 }
+        if !exists(.LogTime) { .LogTime = "2011-11-11 11:11:11.111" }
+
+
+  tf_otel:
+    type: remap
+    inputs:
+      - otel_log.logs
+    source: |
+        .LogAttributes = .attributes
+        .ServiceName = .attributes.container
+        .Body = string!(.message)
+
+         del(.message)
+         del(.attributes)
+
+        if contains(.Body,"client:") && contains(.Body,"server:"){
+         .parsed = parse_regex!(.Body, r'^(?P<time>\S+ \S+) \[(?P<level>\S+)\] \d+#\d+: (?P<body>.*?), client: (?P<client>\S+), server: (?P<server>\S+), request: "(?P<request_method>[A-Z]+) (?P<request_uri>[^ ]+) (?P<http_version>HTTP/\d+\.\d+)"(?:, upstream: "(?P<upstream>[^"]+)")?, host: "(?P<host>[^"]+)"(?:, referrer: "(?P<referrer>[^"]+)")?$')
+
+          .RemoteAddr = .parsed.client
+          .RequestMethod = .parsed.request_method
+          .Request = .parsed.request_uri
+          .HttpVersion = .parsed.http_version
+          .Host = .parsed.host
+          .Server = .parsed.server
+          .Forwarded = .parsed.referrer
+
+        } else {
+          .parsed = parse_regex!(.Body, r'^(?P<time>\S+ \S+) \[(?P<level>\S+)\] \d+#\d+: (?P<body>.*)$')
+        }
+
+        .Level = .parsed.level
+        .LogTime = format_timestamp!(parse_timestamp!(.parsed.time,  "%Y/%m/%d %H:%M:%S"),"%F %T%.3f")
+
+         del(.parsed)
+
+sinks:
+  clickhouse:
+    type: clickhouse
+    inputs:
+      - process
+      - tf_otel
+    endpoint: http://local.org:8123
+    database: otel
+    table: nginx_logs
+    auth:
+      strategy: basic
+      user: otel
+      password: cs123456
+    skip_unknown_fields: true
+    encoding:
+      only_fields: [
+    "RemoteAddr",
+    "RemoteUser",
+    "RequestMethod",
+    "Request",
+    "HttpVersion",
+    "Status",
+    "BytesSent",
+    "UserAgent",
+    "Forwarded",
+    "LogTime",
+    "Body",
+    "Host",
+    "Server",
+    "ServiceName",
+    "TraceId",
+    "LogAttributes",
+    "Level"
+]
+
+  console:
+    type: console
+    inputs:
+      - kafka_id
+    encoding:
+      codec: "json"
+      #json:
+       # pretty: true

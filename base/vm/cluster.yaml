@@ -1,0 +1,128 @@
+---
+services:
+  vmagent:
+    extends:
+      file: agent.yaml
+      service: vmagent
+    depends_on:
+      - "vminsert-1"
+      - "vminsert-2"
+    volumes:
+      - ./config/prometheus-cluster.yml:/etc/prometheus/prometheus.yml
+    command:
+      - '--promscrape.config=/etc/prometheus/prometheus.yml'
+      - '--remoteWrite.url=http://vmauth:8427/insert/0/prometheus/'
+      - '--remoteWrite.tmpDataPath=/vmagentdata'
+      - '--remoteWrite.maxDiskUsagePerURL=100MB'
+      - '--promscrape.configCheckInterval=10s'
+      # - '--reloadAuthKey=file://xxx'
+      # - '--remoteWrite.basicAuth.username'
+      # - '--remoteWrite.basicAuth.password'
+
+
+  # vmstorage shards. Each shard receives 1/N of all metrics sent to vminserts,
+  # where N is number of vmstorages (2 in this case).
+  vmstorage-1:
+    container_name: vmstorage-1
+    image: victoriametrics/vmstorage:v1.103.0-cluster
+    ports:
+      - 8482
+      - 8400
+      - 8401
+    volumes:
+      - /mnt/oss/db/tsdb/vmstorage/1:/storage
+    command:
+      - '--storageDataPath=/storage'
+
+  vmstorage-2:
+    container_name: vmstorage-2
+    image: victoriametrics/vmstorage:v1.103.0-cluster
+    ports:
+      - 8482  #通常用于 VictoriaMetrics 的 HTTP API 接口。
+      - 8400  #用于 VictoriaMetrics 的 vminsert 组件，该组件负责接收时间序列数据。
+      - 8401  #用于 VictoriaMetrics 的 vmselect 组件，该组件负责查询和检索时间序列数据。
+    volumes:
+      - /mnt/oss/db/tsdb/vmstorage/2:/storage
+    command:
+      - '--storageDataPath=/storage'
+
+
+  # vminsert is ingestion frontend. It receives metrics pushed by vmagent,
+  # pre-process them and distributes across configured vmstorage shards.
+  #配置Prometheus使用vminsert、修改Prometheus配置
+   #- url: http://192.168.40.180:8428/api/v1/write
+  #1、 单个配置3条
+  #- url: http://192.168.40.180:8480/insert/0/prometheus
+  #- url: http://192.168.40.181:8480/insert/0/prometheus
+  #- url: http://192.168.40.182:8480/insert/0/prometheus
+  #2、配置 Haproxy 负载地址
+  ##- url: http://192.168.40.188:18480/insert/0/prometheus
+  vminsert-1:
+    container_name: vminsert-1
+    image: victoriametrics/vminsert:v1.103.0-cluster
+    depends_on:
+      - "vmstorage-1"
+      - "vmstorage-2"
+    command:
+      - '--storageNode=vmstorage-1:8400'
+      - '--storageNode=vmstorage-2:8400'
+    ports:
+      - 8480
+  vminsert-2:
+    container_name: vminsert-2
+    image: victoriametrics/vminsert:v1.103.0-cluster
+    depends_on:
+      - "vmstorage-1"
+      - "vmstorage-2"
+    command:
+      - '--storageNode=vmstorage-1:8400'
+      - '--storageNode=vmstorage-2:8400'
+    ports:
+      - 8480
+
+  # vmselect is a query fronted. It serves read queries in MetricsQL or PromQL.
+  # vmselect collects results from configured `--storageNode` shards.
+  vmselect-1:
+    container_name: vmselect-1
+    image: victoriametrics/vmselect:v1.103.0-cluster
+    depends_on:
+      - "vmstorage-1"
+      - "vmstorage-2"
+    command:
+      - '--storageNode=vmstorage-1:8401'
+      - '--storageNode=vmstorage-2:8401'
+      - '--vmalert.proxyURL=http://vmalert:8880'
+    ports:
+      - 8481
+
+  vmselect-2:
+    container_name: vmselect-2
+    image: victoriametrics/vmselect:v1.103.0-cluster
+    depends_on:
+      - "vmstorage-1"
+      - "vmstorage-2"
+    command:
+      - '--storageNode=vmstorage-1:8401'
+      - '--storageNode=vmstorage-2:8401'
+      - '--vmalert.proxyURL=http://vmalert:8880'
+    ports:
+      - 8481
+
+
+  # vmauth is a router and balancer for HTTP requests.
+  # It is configured via --auth.config and balances
+  # read requests from Grafana, vmui, vmalert among vmselects.
+  # It can be used as an authentication proxy.
+  vmauth:
+    container_name: vmauth
+    image: victoriametrics/vmauth:v1.103.0
+    depends_on:
+      - "vmselect-1"
+      - "vmselect-2"
+    volumes:
+      - ./config/auth-cluster.yml:/etc/auth.yml
+    command:
+      - '--auth.config=/etc/auth.yml'
+      - '--configCheckInterval=5s'
+    ports:
+      - 8427:8427

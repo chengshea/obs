@@ -1,0 +1,143 @@
+---
+version: '3.8'
+services:
+  banyandb:
+    image: apache/skywalking-banyandb:0.7-beta
+    container_name: sw-banyandb
+    deploy:
+      resources:
+        limits:
+          cpus: '0.85'
+          memory: 7G
+        reservations:
+          memory: 500M
+    ulimits:
+      nofile:
+        soft: 800000
+        hard: 800000
+      nproc: 8096  # 相当于 ulimit -u
+      memlock: -1  #相当于 ulimit -l unlimited，-1 表示 unlimited
+    environment:
+      - SW_AGENT_NAME=banyandb
+      - SW_AGENT_REPORTER_GRPC_BACKEND_SERVICE=oap:11800
+    volumes:
+      - '/mnt/oss/db/tsdb/banyandb:/tmp'
+    command:
+      - standalone
+      - --observability-modes=native
+    ports:
+      - 17913:17913 # http://localhost:17913
+      - 2121
+    healthcheck:
+      test: ["CMD", "./bydbctl", "health", "--config=-", "--addr=http://banyandb:17913"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    restart: on-failure
+    networks:
+      - sw
+
+  oap:
+    image: apache/skywalking-oap-server:10.0.1
+    container_name: sw-oap
+    #restart: always
+    environment:
+      - TZ=Asia/Shanghai
+      ## 修改存储类型为 PostgreSQL
+      - SW_STORAGE=banyandb # 设置存储后端为 BanyanDB
+      - SW_STORAGE_BANYANDB_TARGETS=banyandb:17912 # BanyanDB 服务器地址和端口
+      - SW_STORAGE_BANYANDB_MAX_BULK_SIZE=10000
+      - SW_STORAGE_BANYANDB_FLUSH_INTERVAL=15
+      - SW_STORAGE_BANYANDB_FLUSH_TIMEOUT=10
+      - SW_STORAGE_BANYANDB_METRICS_SHARDS_NUMBER=1
+      - SW_STORAGE_BANYANDB_RECORD_SHARDS_NUMBER=1
+      - SW_STORAGE_BANYANDB_SUPERDATASET_SHARDS_FACTOR=2
+      - SW_STORAGE_BANYANDB_CONCURRENT_WRITE_THREADS=15
+      - SW_STORAGE_BANYANDB_PROFILE_TASK_QUERY_MAX_SIZE=200
+      - SW_STORAGE_BANYANDB_SEGMENT_INTERVAL_DAYS=1
+      - SW_STORAGE_BANYANDB_SUPER_DATASET_SEGMENT_INTERVAL_DAYS=1
+      - SW_TELEMETRY=prometheus
+      - SW_TELEMETRY_PROMETHEUS_HOST=0.0.0.0
+      - SW_TELEMETRY_PROMETHEUS_PORT=1234
+      - SW_TELEMETRY_PROMETHEUS_SSL_ENABLED=false
+      #receiver-otel
+      - SW_OTEL_RECEIVER=default
+      - SW_OTEL_RECEIVER_ENABLED_HANDLERS="otlp-metrics,otlp-logs,otlp-traces"
+ #     - SW_RECEIVER_ZIPKIN=default
+ #     - SW_ZIPKIN_HTTP_COLLECTOR_ENABLED=true
+ #     - SW_QUERY_ZIPKIN=default
+    ports:
+      - 11800  #收集监控数据的端口
+      - 12800:12800  #接受前端请求的端口
+      - 1234
+    extra_hosts:
+      - "local.org:192.168.122.1" # 添加主机名
+    deploy:
+      resources:
+        limits:
+          cpus: '0.90'
+          memory: 5G
+        reservations:
+          memory: 2G
+    depends_on:
+      banyandb:
+        condition: service_healthy
+    healthcheck:
+      test: [ "CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/12800" ]
+      interval: 10s #健康检查的执行间隔
+      timeout: 2s  #健康检查命令的超时时间
+      retries: 20 #失败的次数
+      start_period: 150s #开始执行健康检查之前的等待时间
+    volumes:
+      - '/etc/localtime:/etc/localtime:ro'
+    networks:
+      - sw
+
+
+  otel-collector:
+    image: k8s.org/monitor/opentelemetry-collector-contrib:0.107.0
+    container_name: otel
+    volumes:
+      - '/opt/monitor/opentelemetry/otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml:ro'
+    ports:
+      - 1888:1888 # pprof extension
+      - 8888:8888 # Prometheus metrics exposed by the Collector
+      - 8889:8889 # Prometheus exporter metrics
+      - 13133:13133 # health_check extension   http://localhost:13133/health
+      - 4317:4317 # OTLP gRPC receiver
+      - 4318:4318 # OTLP http receiver
+      - 56789:55679 # zpages extension   55679/debug/servicez
+    networks:
+      - sw
+
+
+
+##https://skywalking.apache.org/docs/main/next/en/setup/backend/ui-setup/
+  oap-ui:
+    image: apache/skywalking-ui:10.0.1
+    container_name: sw-oap-ui
+    environment:
+      - TZ=Asia/Shanghai
+      # - SW_OAP_ADDRESS=http://192.168.122.1:12800
+      - SW_OAP_ADDRESS=http://oap:12800
+     # - SW_ZIPKIN_ADDRESS=http://oap:9412
+    ports:
+      - "8086:8080"  # 根据需要更改端口映射
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 800M
+        reservations:
+          memory: 200M
+    depends_on:
+      oap:
+        condition: service_healthy
+    volumes:
+      - '/etc/localtime:/etc/localtime:ro'
+    networks:
+      - sw
+
+networks:
+  sw:
+    external: true

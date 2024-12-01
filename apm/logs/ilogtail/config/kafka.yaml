@@ -1,0 +1,34 @@
+enable: true
+inputs: #https://ilogtail.gitbook.io/ilogtail-docs/plugins/input/service-docker-stdout#title-asn-vuf-17z
+  - Type: service_docker_stdout # 容器标准输出流输入类型
+    Stderr: true               # 不采集标准错误流
+    Stdout: true                # 采集标准输出流
+    #IncludeLabel:
+     # app.name: ^(kafka-ui|nginx)$
+    ExcludeLabel:
+      app.name: ilogtail #不采集自身
+    BeginLineRegex: "(^[a-zA-Z]{4}\\s|^\\[|^)\\d{3,4}.\\d{1,3}.\\d{1,3}.*|^{\\n"
+    BeginLineCheckLength: 300
+    BeginLineTimeoutMs: 3000 #ms
+processors:
+  - Type: processor_filter_regex
+    #Include:
+     #tags: "container.name"
+    Exclude: # vector console log {"contents":{"_source_":"stdout"
+      content: "debug|DEBUG|^{\"contents\""
+flushers:
+  - Type: flusher_kafka_v2
+    #PartitionerType: roundrobin 
+    #可选值：json、none、protobuf，默认值：json
+    Convert.Encoding: json
+    Brokers:
+      - kafka:29092
+    Authentication:
+      SASL:
+        Username: admin
+        Password: admin-secret
+        SaslMechanism: PLAIN
+    Topic: ilogtail_%{tag.container.name}    #tag表示从tags中取指定字段值，例如：%{tag.k8s.namespace.name}
+  - Type: flusher_stdout
+    OnlyStdout: true
+    Tags: true

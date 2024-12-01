@@ -1,0 +1,79 @@
+---
+services:
+  clickhouse:
+    extends:
+      file: ../../../base/base.yaml
+      service: clickhouse
+    environment:
+      - CLICKHOUSE_DB=qryn
+      - CLICKHOUSE_USER=qryn
+      - CLICKHOUSE_PASSWORD=cs123456
+    networks:
+      - ck
+
+#http://0.0.0.0:13100/
+  qryn:
+    image: qxip/qryn:3.2.32
+    container_name: qryn
+    ports:
+      - "13100:3100"
+    environment:
+      - CLICKHOUSE_SERVER=clickhouse
+      - CLICKHOUSE_AUTH=qryn:cs123456
+      - CLICKHOUSE_DB=qryn
+    volumes:
+     - ./qryn-view:/app/view/assets:ro #qqryn-view-v3.3.2
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - ck
+
+##https://github.com/metrico/otel-collector
+  otel-collector:
+    container_name: otel-collector
+    image: ghcr.io/metrico/qryn-otel-collector:latest
+    volumes:
+      - ./otel-config.yaml:/etc/otel/config.yaml
+    ports:
+      - 3100     # Loki/Logql HTTP receiver
+      - 3200    # Loki/Logql gRPC receiver
+      - "8088:8088"     # Splunk HEC receiver
+      - "5514:5514"     # Syslog TCP Rereceiverceiver
+      - "24224:24224"   # Fluent Forward receiver
+      - "4317:4317"     # OTLP gRPC receiver
+      - "4318:4318"     # OTLP HTTP receiver
+      - "14250:14250"   # Jaeger gRPC receiver
+      - "14268:14268"   # Jaeger thrift HTTP receiver
+      - "9411:9411"     # Zipkin Trace receiver
+      - "11800:11800"   # Skywalking gRPC receiver
+      - "12800:12800"   # Skywalking HTTP receiver
+     # - "8086:8086"     # InfluxDB Line proto HTTP
+      - 8888     # mertics Line proto https
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    networks:
+      - ck
+
+  promtail:
+    extends:
+      file: ../../../base/base.yaml
+      service: promtail
+    environment:
+      - LOKI_URL=http://otel-collector:3100/loki/api/v1/push
+    depends_on:
+      - otel-collector
+    networks:
+      - ck
+
+  grafana:
+    extends:
+      file: ../../../base/base.yaml
+      service: grafana
+    networks:
+      - ck
+
+networks:
+  ck:
+    external: true

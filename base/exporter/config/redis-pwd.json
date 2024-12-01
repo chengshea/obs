@@ -1,0 +1,3 @@
+{
+  "redis://local.org:9736": "exporter123"
+}

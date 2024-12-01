@@ -1,0 +1,110 @@
+version: '3'
+services:
+  oap:
+    image: apache/skywalking-oap-server:10.0.1
+    container_name: oap
+    #restart: always
+    environment:
+      - TZ=Asia/Shanghai
+      - SW_STORAGE=elasticsearch
+      - SW_NAMESPACE=sw-index
+      - SW_STORAGE_ES_CLUSTER_NODES="es.local.org:9123"
+      - SW_ES_USER=elastic
+      - SW_ES_PASSWORD=cs123456
+      - SW_STORAGE_ES_SSL_JKS_PATH="/opt/es.jks"
+      - SW_STORAGE_ES_SSL_JKS_PASS=cs123456
+      - SW_STORAGE_ES_HTTP_PROTOCOL=https
+      - SW_CORE_RECORD_DATA_TTL=3
+      - SW_CORE_METRICS_DATA_TTL=7
+      ## 修改存储类型为 PostgreSQL
+      # - SW_STORAGE=postgresql
+      # - SW_NAMESPACE=skywalking # 根据需要设置命名空间
+      # - SW_JDBC_URL="jdbc:postgresql://local.org:5433/skywalking" # PostgreSQL JDBC URL
+      # - SW_DATA_SOURCE_USER=postgres # PostgreSQL 用户名
+      # - SW_DATA_SOURCE_PASSWORD=123456 # PostgreSQL 密码
+     ##prometheus
+      - SW_TELEMETRY=prometheus
+      - SW_TELEMETRY_PROMETHEUS_HOST=0.0.0.0
+      - SW_TELEMETRY_PROMETHEUS_PORT=1234
+      - SW_TELEMETRY_PROMETHEUS_SSL_ENABLED=false
+      #receiver-otel
+      - SW_OTEL_RECEIVER=default
+      - SW_OTEL_RECEIVER_ENABLED_HANDLERS="otlp-metrics,otlp-logs,otlp-traces"
+ #     - SW_RECEIVER_ZIPKIN=default
+ #     - SW_ZIPKIN_HTTP_COLLECTOR_ENABLED=true
+ #     - SW_QUERY_ZIPKIN=default
+    ports:
+      - "11800:11800"  #收集监控数据的端口
+      - "12800:12800"  #接受前端请求的端口
+      - "11234:1234"
+    extra_hosts:
+      - "es.local.org:192.168.122.1" # 添加主机名
+    healthcheck:
+      test: [ "CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/127.0.0.1/12800" ]
+      interval: 10s #健康检查的执行间隔
+      timeout: 2s  #健康检查命令的超时时间
+      retries: 3 #失败的次数
+      start_period: 50s #开始执行健康检查之前的等待时间
+    volumes:
+      - '/opt/ELK/elasticsearch-7.17.1/es.local.jks:/opt/es.jks'
+     # - '/opt/ELK/elasticsearch-7.17.1/es.jks:/opt/es.jks'
+      - '/etc/localtime:/etc/localtime:ro'
+    networks:
+      - sw
+  oap-ui:
+    image: apache/skywalking-ui:10.0.1
+    container_name: oap-ui
+    restart: always
+    environment:
+      - TZ=Asia/Shanghai
+     # - SW_ZIPKIN_ADDRESS=http://oap:9412
+      - SW_OAP_ADDRESS=http://oap:12800
+    ports:
+      - "8086:8080"  # 根据需要更改端口映射
+    depends_on:
+      oap:
+        condition: service_healthy
+    volumes:
+      - '/etc/localtime:/etc/localtime:ro'
+    networks:
+      - sw
+
+  elasticsearch_exporter:
+    image: k8s.org/monitor/elasticsearch-exporter:v1.7.0
+    container_name: es-exporter
+    command:
+     - '--es.uri=https://elastic:cs123456@es.local.org:9123'
+     - '--es.ca=/opt/ca.crt'
+     - '--es.client-private-key=/opt/es.key'
+     - '--es.client-cert=/opt/es.crt'
+     # - '--es.ssl-skip-verify'  #跳过证书验证
+     - '--collector.clustersettings'
+     - '--collector.snapshots'
+     - '--web.telemetry-path=/metrics'
+     - '--web.listen-address=:9114'
+     - '--es.timeout=15s'
+     - '--es.clusterinfo.interval=3m'
+    volumes:
+      - '/opt/monitor/elasticsearch_exporter-1.7.0/ssl:/opt:ro'
+    extra_hosts:
+      - "es.local.org:192.168.122.1" # 添加主机名
+    ports:
+    - "9114:9114"
+   networks:
+      - sw
+
+
+  fluentbit:
+    image: fluent/fluent-bit:3.1.6-amd64
+    container_name: fluentbit
+    volumes:
+      - /opt/proxy/openresty/nginx/logs:/tmp:ro
+      - ./config/fluent-bit/fluent-bit.conf:/fluent-bit/etc/fluent-bit.conf
+      - ./config/fluent-bit/fluent-bit-parser.conf:/fluent-bit/etc/fluent-bit-parser.conf
+      - ./config/fluent-bit/fluent-bit-script.lua:/fluent-bit/etc/fluent-bit-script.lua
+    networks:
+      - sw
+
+networks:
+  sw:
+    external: true

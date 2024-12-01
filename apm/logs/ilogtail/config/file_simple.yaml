@@ -1,0 +1,12 @@
+
+enable: false
+inputs:
+  - Type: input_file
+    FilePaths: 
+      - /tmp/*.log
+    Multiline:
+      StartPattern: ^\d{4}/\d{2}/\d{2}
+flushers:
+  - Type: flusher_stdout
+    OnlyStdout: true
+    Tags: true

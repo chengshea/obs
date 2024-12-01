@@ -1,0 +1,18 @@
+---
+services:
+  fluentbit:
+    extends:
+      file: ../../../base/base.yaml
+      service: fluentbit
+    volumes:
+      - ./conf:/fluent-bit/etc
+      - ./forward/vmlogs.conf:/fluent-bit/etc/fluent-bit.conf:ro
+    ports:
+      - 24224:24224
+      - 2020
+    networks:
+      - ck
+
+networks:
+  ck:
+    external: true

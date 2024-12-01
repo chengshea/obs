@@ -1,0 +1,20 @@
+enable: false
+inputs: #https://ilogtail.gitbook.io/ilogtail-docs/plugins/input/service-docker-stdout#title-asn-vuf-17z
+  - Type: service_docker_stdout # 容器标准输出流输入类型
+    Stderr: true               # 不采集标准错误流
+    Stdout: true                # 采集标准输出流
+    ExcludeLabel:
+      app.name: ilogtail #不采集自身 (-|/|\\.)
+    BeginLineRegex: "(^[a-zA-Z]{4}\\s|^\\[|^)\\d{3,4}.\\d{1,3}.\\d{1,3}.*|^{\\n"
+    BeginLineCheckLength: 300
+    BeginLineTimeoutMs: 3000 #ms
+processors:
+  - Type: processor_filter_regex
+    #Include:
+     #content: "^\s*$"
+    Exclude: # vector console log {"contents":{"_source_":"stdout"  |^{\"contents\"
+      content: "debug|DEBUG"
+flushers:
+  - Type: flusher_stdout        # 标准输出流输出类型
+    OnlyStdout: true
+    Tags: true

@@ -1,0 +1,105 @@
+---
+#https://hub.docker.com/r/bitnami/kafka
+
+x-connectors: &connectors
+    image: redpandadata/connectors:v1.0.33
+    container_name: connect
+    ports:
+      - 8083
+    environment:
+      CONNECT_CONFIGURATION: |
+        key.converter=org.apache.kafka.connect.converters.ByteArrayConverter
+        value.converter=org.apache.kafka.connect.converters.ByteArrayConverter
+        group.id=connectors-group
+        offset.storage.topic=_connectors_offsets
+        config.storage.topic=_connectors_configs
+        status.storage.topic=_connectors_status
+        config.storage.replication.factor=-1
+        offset.storage.replication.factor=-1
+        status.storage.replication.factor=-1
+      CONNECT_BOOTSTRAP_SERVERS: redpanda:9092
+      # CONNECT_SASL_MECHANISM: plain
+      # CONNECT_SASL_USERNAME: admin
+      # CONNECT_SASL_PASSWORD_FILE: /opt/kafka/connect-password/redpanda-password/password
+      CONNECT_TLS_ENABLED: "false"
+    volumes:
+      - ./redpanda-password:/opt/kafka/connect-password/redpanda-password
+
+
+services:
+  redpanda:
+    image: redpandadata/redpanda:v24.2.7
+    container_name: redpanda
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      # 内外部连接地址
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr redpanda:33145
+      - --advertise-rpc-addr redpanda:33145
+      - --mode dev-container
+      - --smp 1
+      - --default-log-level=info
+    volumes:
+       - /mnt/lvm/oss/kafka/redpanda/data:/var/lib/redpanda/data
+    ports:
+      - 18081:18081
+      - 18082:18082
+      - 19092:19092
+      - 19644:9644
+    networks:
+      - ck
+
+  console:
+    container_name: redpanda-console
+    image: redpandadata/console:v2.7.2
+    entrypoint: /bin/sh
+    command: -c 'echo "$$CONSOLE_CONFIG_FILE" > /tmp/config.yml; /app/console'
+    environment: #https://docs.redpanda.com/current/console/config/connect-to-redpanda/
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda:9092"]
+          sasl:
+            enabled: false
+            username: admin
+            password: admin-secret
+            mechanism: PLAIN
+          schemaRegistry:
+            enabled: true
+            urls: ["http://redpanda:8081"]
+        redpanda:
+          adminApi:
+            enabled: true
+            urls: ["http://redpanda:9644"]
+        connect:
+          enabled: false
+          clusters:
+            - name: connect
+              url: http://connect:8083
+              tls:
+                enabled: false
+              #username: admin
+              #password: admin-secret
+          connectTimeout: 15s
+          readTimeout: 60s
+          requestTimeout: 6s
+    ports:
+      - 8088:8080
+    depends_on:
+      - redpanda
+    networks:
+      - ck
+
+  # connect:
+    # <<: *connectors
+    # networks:
+      # - ck
+
+networks:
+  ck:
+    external: true

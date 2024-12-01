@@ -1,0 +1,16 @@
+---
+version: '3.8'
+services:
+  cadvisor:
+    image: cadvisor/cadvisor:v0.49.1
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /dev/disk/:/dev/disk:ro
+      - /mnt/oss/docker-root/docker/:/var/lib/docker:ro
+    privileged: true
+    devices:
+      - /dev/kmsg
+    ports:
+      - 9188:8080

@@ -1,0 +1,33 @@
+---
+services:
+  jaeger:
+    extends:
+      file: jaeger.yaml
+      service: jaeger
+
+
+  hotrod:
+    image: jaegertracing/example-hotrod:1.60
+    ports:
+      - "8080:8080"
+    command: ["all"]
+    environment:
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318
+    depends_on:
+      - jaeger
+
+ ##Locust 是一个易于使用的开源负载测试工具
+  load-hotrod:
+    image: "signoz/locust:1.2.3"
+    container_name: load-hotrod
+    hostname: load-hotrod
+    environment:
+      ATTACKED_HOST: http://hotrod:8080
+      LOCUST_MODE: standalone
+      NO_PROXY: standalone
+      TASK_DELAY_FROM: 5
+      TASK_DELAY_TO: 10
+      QUIET_MODE: "${QUIET_MODE:-false}"
+      LOCUST_OPTS: "--headless -u 10 -r 1"
+    volumes:
+      - ../signoz/common/locust-scripts:/locust

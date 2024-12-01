@@ -1,0 +1,19 @@
+# balance load among vmselects
+# see https://docs.victoriametrics.com/vmauth/#load-balancing
+users:
+- username: "vmselect"
+  password: "vmselect123"
+  url_prefix:
+      - http://vmselect-1:8481
+      - http://vmselect-2:8481
+  retry_status_codes: [500, 502]
+
+
+
+unauthorized_user:
+  url_map:
+   - src_paths:
+      - "/insert/.*"
+     url_prefix:
+      - "http://vminsert-1:8480/"
+      - "http://vminsert-2:8480/"

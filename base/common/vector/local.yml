@@ -1,0 +1,49 @@
+---
+#rm /opt/tools/vector/data/otel-to-log/checkpoints.json
+data_dir: "/opt/tools/vector/data"
+
+sources:
+  otel-to-log:
+    type: file
+    include:
+      - /home/cs/oss/k8s-1.26/apm/test/log/otel.log
+    read_from: beginning
+
+
+
+transforms:
+  tf_otel:
+    type: remap
+    inputs:
+      - otel-to-log
+    source: |
+        .msg = parse_json!(.message)
+        del(.message)
+         .parsed = parse_regex!(.msg.message, r'^(?P<time>\S+ \S+) \[(?P<level>\S+)\] \d+#\d+: \*\d+ \[lua\] (?P<filename>.+?):\d+: (?P<body>.*?), client: (?P<client>\S+), server: (?P<server>\S+), request: "(?P<request_method>[A-Z]+) (?P<request_uri>[^ ]+) (?P<http_version>HTTP/\d+\.\d+)", host: "(?P<host>[^"]+)"')
+        
+         # 提取字段
+        .RemoteAddr = .parsed.client
+        .Level = .parsed.level
+        .TimeLocal = .parsed.time
+        .RequestMethod = .parsed.request_method
+        .Request = .parsed.request_uri
+        .HttpVersion = .parsed.http_version
+        .Host = .parsed.host
+        .Server = .parsed.server
+        .LogAttributes = .msg.attributes
+        .ServiceName = .msg.attributes.container
+        .OriginalMessage = .msg.message
+
+        del(.msg)
+        del(.parsed)
+
+sinks:
+  console:
+    type: console
+    inputs:
+      - tf_otel
+    encoding:
+      codec: "json"
+      json:
+        pretty: true
+

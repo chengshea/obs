@@ -1,0 +1,41 @@
+data_dir="/opt/tools/vector/data"
+
+[sources.my_file_source]
+type = "file"
+#include = ["/opt/proxy/openresty/nginx/logs/error.log"]
+include = ["/home/cs/oss/k8s-1.26/apm/test/error.log"]
+
+[sources.my_file_source.multiline]
+mode = "continue_through"
+condition_pattern = "^[0-9]{4}/[0-9]{2}/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} \\[error\\]"
+start_pattern = "^[0-9]{4}/[0-9]{2}/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} \\[error\\]"
+timeout_ms = 5000
+
+#lua
+[transforms.merge_lines]
+type = "remap"
+inputs = ["my_file_source"]
+source = '''
+  .merged = match {
+    if .prev_line_start_with_timestamp && .timestamp {
+         ts = split(.timestamp, " ")[0];
+         prev_ts = split(.prev_line, " ")[0];
+        if ts == prev_ts {
+            .merged = .prev_line + " " + .message  #合并前一行与当前行
+            del(.message)  # 删除当前行的消息内容
+        }
+    }
+    .message  # 默认使用当前行
+  }
+
+  # 保存当前行以供下一次迭代检查
+  .prev_line = .message
+
+  # 提取时间戳，以便在下一次迭代中检查
+  .prev_line_start_with_timestamp = test(.message, "^[0-9]{4}/[0-9]{2}/[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2} \\[error\\]")
+'''
+
+[sinks.my_sink]
+type = "console"
+inputs = ["merge_lines"]
+encoding.codec="json"

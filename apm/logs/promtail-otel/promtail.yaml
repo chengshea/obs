@@ -1,0 +1,34 @@
+---
+services:
+  promtail:
+    extends:
+      file: ../../../base/base.yaml
+      service: promtail
+    volumes:
+      - ./promtail.yml:/etc/promtail/config.yaml
+      - ../nginx/logs/:/var/log/:ro
+    environment:
+      - LOKI_URL=http://otel:3100/loki/api/v1/push
+    depends_on: 
+       - otel
+    networks:
+      - ck
+
+  otel:
+    extends:
+      file: ../../../base/base.yaml
+      service: otel
+    volumes:
+      - ./otel.yml:/etc/otelcol-contrib/config.yaml:ro
+   #   - /etc/localtime:/etc/localtime:ro
+  #  environment:
+  #    TZ: "Asia/Shanghai"
+    depends_on: 
+       - vector
+    networks:
+      - ck
+
+
+networks:
+  ck:
+    external: true

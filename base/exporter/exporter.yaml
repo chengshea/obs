@@ -1,0 +1,51 @@
+---
+services:
+  node_exporter:
+    image: k8s.org/monitor/node-exporter:v1.8.2
+    container_name: node_exporter
+    command:
+      - '--path.rootfs=/host'
+   #   - '--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|var/lib/docker/.+|var/lib/kubelet/.+)($|/)'
+    ports:
+      - "9100:9100/tcp"  
+    restart: unless-stopped
+    volumes:
+      - '/:/host:ro,rslave'
+  postgres-exporter:
+    image: k8s.org/monitor/postgres-exporter:v0.15.0
+    container_name: postgres_exporter
+    extra_hosts:
+      - "local.org:192.168.122.1" # 添加主机名
+    environment:
+     - DATA_SOURCE_NAME=postgres://postgres:123456@local.org:5433/postgres?sslmode=disable
+    ports:
+      - "9187:9187/tcp"
+  mysqld-exporter:
+    image: k8s.org/monitor/mysqld-exporter:v0.15.1
+    container_name: mysqld_exporter
+    command:
+      - '--mysqld.address=local.org:3305'
+      - '--config.my-cnf=/opt/my.cnf'
+    volumes:
+      - './config/mysql.cnf:/opt/my.cnf'
+    ports:
+      - "9104:9104/tcp"  
+    extra_hosts:
+      - "local.org:192.168.122.1" # 添加主机名
+  redis-exporter:
+    image: k8s.org/monitor/redis_exporter:v1.62.0
+    container_name: redis_exporter
+    extra_hosts:
+      - "local.org:192.168.122.1" # 添加主机名
+    command:
+       - '--redis.addr=redis://local.org:9736'
+       - '--redis.user=exporter'
+       - '--redis.password-file=/opt/redis-pwd.json'
+       - '--web.listen-address=0.0.0.0:9121'
+       - '--web.telemetry-path=/metrics'
+    volumes:
+      - './config/redis-pwd.json:/opt/redis-pwd.json'
+    ports:
+      - "9121:9121/tcp"  
+
+

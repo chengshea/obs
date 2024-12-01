@@ -1,0 +1,19 @@
+#https://thanos.io/tip/thanos/storage.md/#s3 
+type: S3
+config:
+  bucket: "tsdb"
+  endpoint: "minio.ui.k8s.cn:9000"
+  region: ""
+  access_key: "blGDf93r2z7JI7LHpfop"
+  insecure: false
+  signature_version2: false
+  secret_key: "TJUl16aHrjMdFGHx1oId6ZQBDPBSzdhbFWyFRmEN"
+  # put_user_metadata: {}
+  http_config:
+    idle_conn_timeout: 1m30s
+    response_header_timeout: 2m
+    insecure_skip_verify: true
+  trace:
+    enable: false
+  list_objects_version: ""
+  part_size: 134217728

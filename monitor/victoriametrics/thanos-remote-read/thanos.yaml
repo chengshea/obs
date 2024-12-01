@@ -1,0 +1,37 @@
+---
+version: '3.8'
+services:
+  thanos-store:
+    image: k8s.org/cs/thanos:v0.32.4
+    container_name: thanos-store
+    volumes:
+      - "./objstore-config.yaml:/etc/objstore-config.yaml:ro"
+    command:
+      - "store"
+      - "--data-dir=/tmp/data"
+      - "--objstore.config-file=/etc/objstore-config.yaml"
+    ports:
+      - 10902
+      - 10901
+    extra_hosts:
+       - "minio.ui.k8s.cn:192.168.122.1" # 添加主机名
+  thanos-query:
+    image: k8s.org/cs/thanos:v0.32.4
+    container_name: thanos-query
+    volumes:
+      - "./store-sd.yaml:/etc/store-sd.yaml:ro"
+    command:
+      - "query"
+      - "--store.sd-files=/etc/store-sd.yaml"
+    ports:
+      - "10902:10902"
+      # - "10901:10901" 
+  thanos-remote-read:
+    image: thanos-remote-read:latest
+    container_name: thanos-remote-read
+    command:
+      - "-store"
+      - "thanos-query:10901"
+    ports:
+      - "10080:10080" 
+#❯ curl http://localhost:10080/api/v1/read

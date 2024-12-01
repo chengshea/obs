@@ -1,0 +1,24 @@
+---
+services:
+  otel:
+    extends:
+    file: ../../base/base.yaml
+    service: otel
+    volumes:
+      - './sw-config.yaml:/etc/otelcol-contrib/config.yaml:ro'
+    networks:
+      - sw
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z -v oap 11800"]
+      interval: 3s #健康检查的执行间隔
+      timeout: 2s  #健康检查命令的超时时间
+      retries: 3 #失败的次数
+      start_period: 12s #开始执行健康检查之前的等待时间
+
+
+include:
+  - test-tool.yaml
+
+networks:
+  sw:
+    external: true

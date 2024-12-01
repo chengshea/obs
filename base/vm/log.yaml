@@ -1,0 +1,16 @@
+---
+services:
+  vmlogs:
+    image: victoriametrics/victoria-logs:latest
+    container_name: vmlogs
+    ports:
+      - "9428:9428"
+    volumes:
+      - /mnt/oss/db/tsdb/vmdata/logs-data:/victoria-logs-data
+    command: #https://docs.victoriametrics.com/victorialogs/?highlight=retentionperiod#list-of-command-line-flags
+      - -storageDataPath=/victoria-logs-data
+      - -retention.maxDiskSpaceUsageBytes=680MB 
+      - -retentionPeriod=30d
+      - -loggerTimezone=Asia/Shanghai
+
+

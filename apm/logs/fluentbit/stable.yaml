@@ -1,0 +1,60 @@
+---
+x-logging: &logging-fluentd
+  depends_on:
+    - fluentbit
+ #需要固定ip配置,后使用forward接收 https://docs.docker.com/engine/logging/drivers/fluentd/
+  logging: 
+    driver: fluentd
+    options:
+      fluentd-address: "local.org:24224"
+      labels: "{{.Name}}/{{.ID}}"
+      #异步日志收集,没有该参数先关闭收集器，会导致关闭容器时卡
+      fluentd-async: "true"
+      # 重新连接间隔
+      fluentd-async-reconnect-interval: 5s
+      # 缓冲日志条目数量
+      fluentd-buffer-limit: 21000
+      # 重试等待时间
+      fluentd-retry-wait: 6s
+      # 最大重试次数
+      fluentd-max-retries: 10
+      # 启用纳秒级精度时间戳
+      fluentd-sub-second-precision: "true"
+
+x-vm-logs: &vm-logs
+    extends:
+      file: ../../../base/vm/log.yaml
+      service: vmlogs
+    networks:
+       - ck
+
+x-nginx: &nginx-ui
+    extends:
+      file: ../nginx/stable.yaml
+      service: openresty-err
+#直接收集打印error
+
+
+#https://github.com/fluent/fluent-bit/tree/master/conf
+services:
+  fluentbit:
+    extends:
+      file: ./lua.yaml
+      service: fluentbit
+    volumes:
+     # - ./conf/input-lua.conf:/fluent-bit/etc/fluent-bit.conf
+      - ./lua/vmlogs.conf:/fluent-bit/etc/fluent-bit.conf
+     # - ../nginx/logs/:/tmp/:ro
+    networks:
+      - ck
+
+  vmlogs:
+    <<: *vm-logs
+
+  openresty:
+    <<: *nginx-ui
+   # <<: *logging-fluentd
+
+networks:
+  ck:
+    external: true

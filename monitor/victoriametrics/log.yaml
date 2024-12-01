@@ -1,0 +1,21 @@
+---
+services:
+  vl-fluentbit:
+    extends:
+      file: ../../base/base.yaml
+      service: fluentbit
+    container_name: vl-fluentbit
+    volumes:
+      - ./yml/fb-vmlogs.conf:/fluent-bit/etc/fluent-bit.conf
+    depends_on: [vmlogs]
+    ports:
+      - "2020:2020" #https://docs.fluentbit.io/manual/administration/monitoring
+
+  vmlogs:
+    extends:
+      file: ../../base/vm/log.yaml
+      service: vmlogs
+    ports:
+      - "9428:9428"
+
+

@@ -1,0 +1,85 @@
+kafka:
+  brokers:
+    #- redpanda:9092
+     - kafka:29092
+  clientId: console
+  #rackId:
+  sasl:
+    enabled: true
+    username: admin
+    password: admin-secret
+    # Valid mechanisms are: PLAIN, SCRAM-SHA-256,SCRAM-SHA-512, GSSAPI, OAUTHBEARER and AWS_MSK_IAM.
+    mechanism: PLAIN
+
+  tls:
+    enabled: false
+    caFilepath:
+    certFilepath:
+    keyFilepath:
+    insecureSkipTlsVerify: false
+
+  schemaRegistry:
+    enabled: true
+    urls: ["http://redpanda:8081"]
+    # username:
+    # Basic auth password. This can also be set using the --schema.registry.password flag.
+    # password:
+    # bearerToken:
+    tls:
+      enabled: false
+      caFilepath:
+      certFilepath:
+      keyFilepath:
+      insecureSkipTlsVerify: false
+
+
+redpanda:
+  adminApi:
+    enabled: false
+    urls: ["http://redpanda:9644"]
+    # username: ""
+    # password: ""
+    tls:
+      enabled: false
+      caFilepath: ""
+      certFilepath: ""
+      keyFilepath: ""
+    startup:
+      maxRetries: 5
+      retryInterval: 1s
+      maxRetryInterval: 60s
+      backoffMultiplier: 2
+
+
+
+connect:
+  enabled: true
+  clusters:
+    - name: connect
+      url: http://connect:8083
+      tls:
+        enabled: false
+        caFilepath:
+        certFilepath:
+        keyFilepath:
+        insecureSkipTlsVerify: false
+      # username: admin
+      # password: admin-secret
+      #token:
+  connectTimeout: 15s
+  readTimeout: 60s
+  requestTimeout: 6s
+
+
+serveFrontend: true
+
+# exported Prometheus metrics. /console
+metricsNamespace: console
+  
+# Valid values are: debug, info, warn, error, fatal.
+logger:
+  level: info
+
+# 向 Redpanda 发送匿名使用情况统计信息
+analytics:
+  enabled: false

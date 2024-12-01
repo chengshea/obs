@@ -1,0 +1,113 @@
+---
+x-logging: &logging-fluentd
+ #需要固定ip配置,后使用forward接收 https://docs.docker.com/engine/logging/drivers/fluentd/
+  logging: 
+    driver: fluentd
+    options:
+      fluentd-address: "local.org:24224"
+      labels: "{{.Name}}/{{.ID}}"
+      #异步日志收集,没有该参数先关闭收集器，会导致关闭容器时卡
+      fluentd-async: "true"
+      # 重新连接间隔
+      fluentd-async-reconnect-interval: 5s
+      # 缓冲日志条目数量
+      fluentd-buffer-limit: 21000
+      # 重试等待时间
+      fluentd-retry-wait: 6s
+      # 最大重试次数
+      fluentd-max-retries: 10
+      # 启用纳秒级精度时间戳
+      fluentd-sub-second-precision: "true"
+  networks:
+    - ck
+
+x-fluentbit-l: &fluentbit-lua
+    extends:
+      file: ./fluentbit/lua.yaml
+      service: fluentbit
+    volumes:
+       - ./fluentbit/lua/kafka.conf:/fluent-bit/etc/fluent-bit.conf
+    networks:
+      - ck
+
+x-fluentbit-f: &fluentbit-f
+    extends:
+      file: ./fluentbit/forward.yaml
+      service: fluentbit
+    volumes:
+       - ./fluentbit/forward/kafka.conf:/fluent-bit/etc/fluent-bit.conf
+    networks:
+      - ck
+
+x-filebeat: &file-beat
+    extends:
+      file: ./filebeat/filebeat.yaml
+      service: filebeat
+    volumes:
+      - ./filebeat/kafka.yml:/usr/share/filebeat/filebeat.yml:ro
+    networks:
+      - ck
+
+x-fluentd: &fluentd
+    extends:
+      file: ./fluentd/fluentd.yaml
+      service: fluentd
+    volumes:
+      - ./fluentd/lua.conf:/fluentd/etc/fluent.conf:ro
+    networks:
+      - ck
+
+x-ilogtail: &ilogtail
+    extends:
+      file: ./ilogtail/ilogtail.yaml
+      service: ilogtail
+    networks:
+      - ck
+
+
+include: 
+  #- ./kafka/kafka.yaml
+  - ./kafka/cp.yaml
+  #- ./kafka/redpanda.yaml
+
+#https://github.com/fluent/fluent-bit/tree/master/conf
+services:
+  ilogtail:
+    <<: *ilogtail
+    depends_on:
+      kafka:
+         condition: service_healthy
+
+  nginx:
+    extends:
+      file: ./nginx/stable.yaml
+      service: openresty-err
+    container_name: openresty
+    ports:
+      - "8089:80"
+    #<<: *logging-fluentd
+    networks:
+      - ck
+
+  # vector:
+    # extends:
+      # file: ../../base/base.yaml
+      # service: vector
+    # volumes:
+      # - ../nginx/logs/:/var/log/
+    # entrypoint: ["vector", "-c", "/etc/vector/vector.yaml"]
+    # depends_on:
+      # kafka:
+         # condition: service_healthy
+    # environment:              
+      # VECTOR_LOG: error
+    # networks:
+      # - ck
+
+
+
+networks:
+  ck:
+    external: true
+
+

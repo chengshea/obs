@@ -1,0 +1,51 @@
+---
+include:
+  - ../../base/vm/cluster.yaml
+
+services:
+  # vmalert executes alerting and recording rules
+  vmalert:
+    container_name: vmalert
+    image: victoriametrics/vmalert:v1.103.0
+    depends_on:
+      - "vmauth"
+    ports:
+      - 8880:8880
+    volumes:
+      - ./yml/alerts-cluster.yml:/etc/alerts/alerts.yml
+      - ./yml/alerts-health.yml:/etc/alerts/alerts-health.yml
+      - ./yml/alerts-vmagent.yml:/etc/alerts/alerts-vmagent.yml
+      - ./yml/alerts-vmalert.yml:/etc/alerts/alerts-vmalert.yml
+      - ./yml/alerts-vmauth.yml:/etc/alerts/alerts-vmauth.yml
+      - ./yml/pwd.txt:/etc/alerts/pwd.txt
+    command:
+      - '--datasource.url=http://vmauth:8427/select/0/prometheus'
+      - '--datasource.basicAuth.username=vmselect'
+      - '--datasource.basicAuth.password=vmselect123'
+      - '--remoteRead.basicAuth.username=vmselect'
+    #  - '--remoteRead.basicAuth.password=vmselect123'
+      - '--remoteRead.basicAuth.passwordFile=/etc/alerts/pwd.txt'
+      - '--remoteRead.tlsInsecureSkipVerify=true'
+      - '--remoteRead.url=http://vmauth:8427/select/0/prometheus'
+      - '--remoteRead.url=https://vmauth.local.org/select/0/prometheus'
+      - '--remoteWrite.url=http://vmauth:8427/insert/0/prometheus'
+      - '--notifier.url=http://alertmanager:9093/'
+      - '--rule=/etc/alerts/*.yml'
+      #- '--remoteWrite.basicAuth.username='
+      # display source of alerts in grafana
+      - '--external.url=https://grafana.local.org' #grafana outside container
+      # - '-external.url=http://127.0.0.1:3000' #grafana outside container
+      - '--external.alert.source=explore?orgId=1&left={"datasource":"VictoriaMetrics","queries":[{"expr":{{.Expr|jsonEscape|queryEscape}},"refId":"A"}],"range":{"from":"{{ .ActiveAt.UnixMilli }}","to":"now"}}'
+
+
+  # alertmanager receives alerting notifications from vmalert
+  # and distributes them according to --config.file.
+  alertmanager:
+    container_name: alertmanager
+    image: prom/alertmanager:v0.27.0
+    volumes:
+      - ./yml/alertmanager.yml:/config/alertmanager.yml
+    command:
+      - '--config.file=/config/alertmanager.yml'
+    ports:
+      - 9093:9093

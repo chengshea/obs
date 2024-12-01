@@ -1,0 +1,11 @@
+---
+services:
+  vmagent:
+    container_name: vmagent
+    image: victoriametrics/vmagent:v1.103.0
+    ports:
+      - 8429  #接受push的端口
+    volumes:
+      - /mnt/oss/db/tsdb/vmdata/agent-data:/vmagentdata
+    command:
+      - '--promscrape.config=/etc/prometheus/prometheus.yml'

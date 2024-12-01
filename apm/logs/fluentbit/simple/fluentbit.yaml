@@ -1,0 +1,33 @@
+---
+services:
+  fluentbit:
+    extends:
+      file: ../../../../base/base.yaml
+      service: fluentbit
+    volumes:
+      - ../conf:/fluent-bit/etc
+      - ./example.yaml:/fluent-bit/etc/example.yaml
+    command: /fluent-bit/bin/fluent-bit -c /fluent-bit/etc/example.yaml
+    ports:
+      - 2020
+    networks:
+      - ck
+
+  vmlogs:
+    image: victoriametrics/victoria-logs:latest
+    container_name: vmlogs
+    volumes:
+      - /mnt/oss/db/tsdb/vmdata/logs-data:/victoria-logs-data
+    command: #https://docs.victoriametrics.com/victorialogs/?highlight=retentionperiod#list-of-command-line-flags
+      - -storageDataPath=/victoria-logs-data
+      - -retention.maxDiskSpaceUsageBytes=680MB 
+      - -retentionPeriod=30d
+      - -loggerTimezone=Asia/Shanghai
+    ports:
+      - "9428:9428"
+    networks:
+       - ck
+
+networks:
+  ck:
+    external: true
